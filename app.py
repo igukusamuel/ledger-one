@@ -1,6 +1,5 @@
 import streamlit as st
 from dataclasses import dataclass, asdict
-from typing import Optional
 import json
 
 # =====================================================
@@ -13,7 +12,7 @@ st.set_page_config(
 )
 
 # =====================================================
-# CORE TAX DATA MODELS (SOURCE OF TRUTH)
+# DATA MODELS (CANONICAL SOURCE OF TRUTH)
 # =====================================================
 
 @dataclass
@@ -25,6 +24,14 @@ class TaxpayerInfo:
 
 
 @dataclass
+class Income1040:
+    wages: float = 0.0
+    interest: float = 0.0
+    dividends: float = 0.0
+    capital_gains: float = 0.0
+
+
+@dataclass
 class Income1040NR:
     wages_us: float = 0.0
     business_income_eci: float = 0.0
@@ -33,56 +40,75 @@ class Income1040NR:
 
 
 @dataclass
-class Deductions1040NR:
-    state_taxes: float = 0.0
-    charitable_contributions: float = 0.0
+class Payments:
+    withholding: float = 0.0
+    estimated_payments: float = 0.0
 
 
 @dataclass
-class Payments1040NR:
-    withholding_w2: float = 0.0
-    withholding_1042s: float = 0.0
-    estimated_payments: float = 0.0
+class TaxReturn1040:
+    taxpayer: TaxpayerInfo
+    income: Income1040
+    payments: Payments
+
+    def agi(self) -> float:
+        return (
+            self.income.wages
+            + self.income.interest
+            + self.income.dividends
+            + self.income.capital_gains
+        )
 
 
 @dataclass
 class TaxReturn1040NR:
     taxpayer: TaxpayerInfo
     income: Income1040NR
-    deductions: Deductions1040NR
-    payments: Payments1040NR
+    payments: Payments
 
-    def total_eci_income(self) -> float:
+    def eci_income(self) -> float:
         return self.income.wages_us + self.income.business_income_eci
 
-    def total_fdap_income(self) -> float:
-        return self.income.fdap_income_us
+    def agi(self) -> float:
+        return self.eci_income() + self.income.capital_gains_us
 
-    def adjusted_gross_income(self) -> float:
-        return self.total_eci_income() + self.income.capital_gains_us
 
 # =====================================================
-# UI
+# SIDEBAR — FORM SELECTION
 # =====================================================
 
-st.title("LedgerOne — 1040-NR Prototype")
-st.caption("Corporate-grade accounting logic · Individual tax interface")
+st.sidebar.header("Return Type")
 
-# -----------------------------
-# SECTION 1 — TAXPAYER INFO
-# -----------------------------
+return_type = st.sidebar.selectbox(
+    "Select Tax Form",
+    ["1040 (Resident)", "1040-NR (Nonresident)"]
+)
+
+st.sidebar.divider()
+st.sidebar.caption("One system • Different tax views")
+
+# =====================================================
+# HEADER
+# =====================================================
+
+st.title("LedgerOne — Individual Tax Prototype")
+st.caption("Corporate-grade architecture · Personal & Nonresident tax")
+
+# =====================================================
+# TAXPAYER INFO
+# =====================================================
 
 st.header("1. Taxpayer Information")
 
-col1, col2 = st.columns(2)
+c1, c2 = st.columns(2)
 
-first_name = col1.text_input("First name")
-last_name = col2.text_input("Last name")
+first_name = c1.text_input("First Name")
+last_name = c2.text_input("Last Name")
 
-country = st.text_input("Country of residence")
+country = st.text_input("Country of Residence")
 filing_status = st.selectbox(
-    "Filing status",
-    ["Single", "Married Filing Separately", "Other"]
+    "Filing Status",
+    ["Single", "Married Filing Jointly", "Married Filing Separately", "Other"]
 )
 
 taxpayer = TaxpayerInfo(
@@ -92,137 +118,151 @@ taxpayer = TaxpayerInfo(
     filing_status=filing_status
 )
 
-# -----------------------------
-# SECTION 2 — INCOME
-# -----------------------------
+# =====================================================
+# INCOME SECTION (DYNAMIC)
+# =====================================================
 
-st.header("2. Income (1040-NR)")
+st.header("2. Income")
 
-st.subheader("Effectively Connected Income (ECI)")
+if return_type == "1040 (Resident)":
+    wages = st.number_input("Wages (W-2)", min_value=0.0, step=100.0)
+    interest = st.number_input("Interest Income", min_value=0.0, step=50.0)
+    dividends = st.number_input("Dividend Income", min_value=0.0, step=50.0)
+    cap_gains = st.number_input("Capital Gains", min_value=0.0, step=100.0)
 
-wages_us = st.number_input(
-    "US W-2 Wages (Line 1a)",
-    min_value=0.0,
-    step=100.0
-)
+    income = Income1040(
+        wages=wages,
+        interest=interest,
+        dividends=dividends,
+        capital_gains=cap_gains
+    )
 
-business_income = st.number_input(
-    "Schedule C Net Income (ECI)",
-    min_value=0.0,
-    step=100.0
-)
+else:
+    wages_us = st.number_input("US W-2 Wages (ECI)", min_value=0.0, step=100.0)
+    business_eci = st.number_input("Schedule C Net Income (ECI)", min_value=0.0, step=100.0)
+    cap_gains_us = st.number_input("US Capital Gains", min_value=0.0, step=100.0)
+    fdap = st.number_input("US FDAP Income", min_value=0.0, step=100.0)
 
-st.subheader("Other US Income")
+    income = Income1040NR(
+        wages_us=wages_us,
+        business_income_eci=business_eci,
+        capital_gains_us=cap_gains_us,
+        fdap_income_us=fdap
+    )
 
-capital_gains = st.number_input(
-    "US Capital Gains",
-    min_value=0.0,
-    step=100.0
-)
+# =====================================================
+# PAYMENTS
+# =====================================================
 
-fdap_income = st.number_input(
-    "US FDAP Income (Dividends, Interest)",
-    min_value=0.0,
-    step=100.0
-)
+st.header("3. Payments")
 
-income = Income1040NR(
-    wages_us=wages_us,
-    business_income_eci=business_income,
-    capital_gains_us=capital_gains,
-    fdap_income_us=fdap_income
-)
+withholding = st.number_input("Federal Withholding", min_value=0.0, step=100.0)
+estimated = st.number_input("Estimated Payments", min_value=0.0, step=100.0)
 
-# -----------------------------
-# SECTION 3 — DEDUCTIONS
-# -----------------------------
-
-st.header("3. Deductions (Limited for 1040-NR)")
-
-state_taxes = st.number_input(
-    "State & Local Taxes Paid",
-    min_value=0.0,
-    step=100.0
-)
-
-charity = st.number_input(
-    "Charitable Contributions",
-    min_value=0.0,
-    step=100.0
-)
-
-deductions = Deductions1040NR(
-    state_taxes=state_taxes,
-    charitable_contributions=charity
-)
-
-# -----------------------------
-# SECTION 4 — PAYMENTS
-# -----------------------------
-
-st.header("4. Payments & Withholding")
-
-withholding_w2 = st.number_input(
-    "W-2 Federal Withholding",
-    min_value=0.0,
-    step=100.0
-)
-
-withholding_1042s = st.number_input(
-    "1042-S Withholding",
-    min_value=0.0,
-    step=100.0
-)
-
-estimated = st.number_input(
-    "Estimated Tax Payments",
-    min_value=0.0,
-    step=100.0
-)
-
-payments = Payments1040NR(
-    withholding_w2=withholding_w2,
-    withholding_1042s=withholding_1042s,
+payments = Payments(
+    withholding=withholding,
     estimated_payments=estimated
 )
 
-# -----------------------------
-# BUILD RETURN OBJECT
-# -----------------------------
+# =====================================================
+# BUILD RETURN
+# =====================================================
 
-tax_return = TaxReturn1040NR(
-    taxpayer=taxpayer,
-    income=income,
-    deductions=deductions,
-    payments=payments
+if return_type == "1040 (Resident)":
+    tax_return = TaxReturn1040(
+        taxpayer=taxpayer,
+        income=income,
+        payments=payments
+    )
+    agi = tax_return.agi()
+else:
+    tax_return = TaxReturn1040NR(
+        taxpayer=taxpayer,
+        income=income,
+        payments=payments
+    )
+    agi = tax_return.agi()
+
+# =====================================================
+# REVIEW
+# =====================================================
+
+st.header("4. Review")
+
+st.metric("Adjusted Gross Income (AGI)", f"${agi:,.2f}")
+
+# =====================================================
+# DOWNLOADS
+# =====================================================
+
+st.header("5. Download")
+
+user_return_json = json.dumps(asdict(tax_return), indent=2)
+
+st.download_button(
+    "Download Your Draft Return (JSON)",
+    data=user_return_json,
+    file_name="tax_return_draft.json",
+    mime="application/json"
 )
 
 # -----------------------------
-# SECTION 5 — REVIEW
+# SAMPLE RETURNS
 # -----------------------------
 
-st.header("5. Review Summary")
+sample_1040 = {
+    "taxpayer": {
+        "first_name": "John",
+        "last_name": "Doe",
+        "country_of_residence": "United States",
+        "filing_status": "Single"
+    },
+    "income": {
+        "wages": 85000,
+        "interest": 500,
+        "dividends": 1200,
+        "capital_gains": 4000
+    },
+    "payments": {
+        "withholding": 14000,
+        "estimated_payments": 0
+    }
+}
 
-st.metric("Total ECI Income", f"${tax_return.total_eci_income():,.2f}")
-st.metric("Total FDAP Income", f"${tax_return.total_fdap_income():,.2f}")
-st.metric("Adjusted Gross Income (AGI)", f"${tax_return.adjusted_gross_income():,.2f}")
-
-# -----------------------------
-# SECTION 6 — DOWNLOAD
-# -----------------------------
-
-st.header("6. Download Draft Return")
-
-return_json = json.dumps(asdict(tax_return), indent=2)
+sample_1040nr = {
+    "taxpayer": {
+        "first_name": "Jane",
+        "last_name": "Smith",
+        "country_of_residence": "United Kingdom",
+        "filing_status": "Single"
+    },
+    "income": {
+        "wages_us": 42000,
+        "business_income_eci": 18000,
+        "capital_gains_us": 3000,
+        "fdap_income_us": 2500
+    },
+    "payments": {
+        "withholding": 9000,
+        "estimated_payments": 0
+    }
+}
 
 st.download_button(
-    label="Download 1040-NR Draft (JSON)",
-    data=return_json,
-    file_name="1040NR_draft.json",
+    "Download Sample 1040 (Filled)",
+    data=json.dumps(sample_1040, indent=2),
+    file_name="sample_1040.json",
+    mime="application/json"
+)
+
+st.download_button(
+    "Download Sample 1040-NR (Filled)",
+    data=json.dumps(sample_1040nr, indent=2),
+    file_name="sample_1040nr.json",
     mime="application/json"
 )
 
 st.caption(
-    "This file represents the structured source-of-truth for your return. "
-    "PDF generation and e-file can be layered on later."
+    "These JSON files are the system source-of-truth. "
+    "PDF rendering and IRS e-file can be layered on without redesign."
 )
