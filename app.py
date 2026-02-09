@@ -1,211 +1,228 @@
 import streamlit as st
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, asdict
+from typing import Optional
+import json
 
 # =====================================================
-# CORE LEDGER (CORPORATE-GRADE, PERSONA-AGNOSTIC)
+# CONFIG
+# =====================================================
+
+st.set_page_config(
+    page_title="LedgerOne",
+    layout="centered"
+)
+
+# =====================================================
+# CORE TAX DATA MODELS (SOURCE OF TRUTH)
 # =====================================================
 
 @dataclass
-class Account:
-    name: str
-    type: str                     # Asset, Income, Expense
-    tax_line: str | None = None
-    source: str | None = None     # US / FOREIGN
-    character: str | None = None  # ECI / FDAP
-    balance: float = 0.0
-
-    def post(self, amount: float):
-        self.balance += amount
+class TaxpayerInfo:
+    first_name: str
+    last_name: str
+    country_of_residence: str
+    filing_status: str
 
 
 @dataclass
-class JournalLine:
-    account: Account
-    amount: float
+class Income1040NR:
+    wages_us: float = 0.0
+    business_income_eci: float = 0.0
+    capital_gains_us: float = 0.0
+    fdap_income_us: float = 0.0
 
 
-class JournalEntry:
-    def __init__(self, memo: str):
-        self.memo = memo
-        self.lines: List[JournalLine] = []
-
-    def add(self, account: Account, amount: float):
-        self.lines.append(JournalLine(account, amount))
-
-    def post(self):
-        if round(sum(l.amount for l in self.lines), 2) != 0:
-            raise ValueError("Unbalanced journal entry")
-        for line in self.lines:
-            line.account.post(line.amount)
-
-# =====================================================
-# TAX ENGINE (1040 vs 1040-NR)
-# =====================================================
-
-def include_income(account: Account, tax_form: str) -> bool:
-    if tax_form == "1040":
-        return True
-    if tax_form == "1040-NR":
-        return account.source == "US"
-    return False
+@dataclass
+class Deductions1040NR:
+    state_taxes: float = 0.0
+    charitable_contributions: float = 0.0
 
 
-def generate_schedule_c(accounts, tax_form):
-    result = {}
-    for acc in accounts:
-        if not acc.tax_line:
-            continue
+@dataclass
+class Payments1040NR:
+    withholding_w2: float = 0.0
+    withholding_1042s: float = 0.0
+    estimated_payments: float = 0.0
 
-        if not include_income(acc, tax_form):
-            continue
 
-        if tax_form == "1040-NR" and acc.character != "ECI":
-            continue
+@dataclass
+class TaxReturn1040NR:
+    taxpayer: TaxpayerInfo
+    income: Income1040NR
+    deductions: Deductions1040NR
+    payments: Payments1040NR
 
-        result.setdefault(acc.tax_line, 0)
-        result[acc.tax_line] += acc.balance
+    def total_eci_income(self) -> float:
+        return self.income.wages_us + self.income.business_income_eci
 
-    return result
+    def total_fdap_income(self) -> float:
+        return self.income.fdap_income_us
 
+    def adjusted_gross_income(self) -> float:
+        return self.total_eci_income() + self.income.capital_gains_us
 
 # =====================================================
-# SAMPLE DATA (SIMULATES REAL TRANSACTIONS)
+# UI
 # =====================================================
 
-def load_sample_data(accounts):
-    cash = accounts["Cash"]
-    revenue = accounts["Consulting Revenue"]
-    ads = accounts["Advertising Expense"]
-    foreign_div = accounts["Foreign Dividend"]
-
-    # Client payment (US ECI)
-    je1 = JournalEntry("Client payment")
-    je1.add(cash, 5000)
-    je1.add(revenue, -5000)
-    je1.post()
-
-    # Advertising expense
-    je2 = JournalEntry("Google Ads")
-    je2.add(ads, 300)
-    je2.add(cash, -300)
-    je2.post()
-
-    # Foreign dividend (FDAP)
-    je3 = JournalEntry("Foreign dividend")
-    je3.add(foreign_div, -450)
-    je3.add(cash, 450)
-    je3.post()
-
-
-# =====================================================
-# STREAMLIT UI
-# =====================================================
-
-st.set_page_config(page_title="LedgerOne Prototype", layout="centered")
-
-st.title("LedgerOne — Personal / Freelancer Prototype")
+st.title("LedgerOne — 1040-NR Prototype")
+st.caption("Corporate-grade accounting logic · Individual tax interface")
 
 # -----------------------------
-# ONBOARDING (PERSONA + TAX)
+# SECTION 1 — TAXPAYER INFO
 # -----------------------------
-st.sidebar.header("Setup")
 
-persona = st.sidebar.selectbox(
-    "Persona",
-    ["Personal", "Freelancer"]
+st.header("1. Taxpayer Information")
+
+col1, col2 = st.columns(2)
+
+first_name = col1.text_input("First name")
+last_name = col2.text_input("Last name")
+
+country = st.text_input("Country of residence")
+filing_status = st.selectbox(
+    "Filing status",
+    ["Single", "Married Filing Separately", "Other"]
 )
 
-tax_form = st.sidebar.selectbox(
-    "Tax Filing",
-    ["1040", "1040-NR"]
+taxpayer = TaxpayerInfo(
+    first_name=first_name,
+    last_name=last_name,
+    country_of_residence=country,
+    filing_status=filing_status
 )
 
-st.sidebar.caption("Same ledger • different tax view")
-
 # -----------------------------
-# CHART OF ACCOUNTS (TEMPLATE)
+# SECTION 2 — INCOME
 # -----------------------------
-accounts = {
-    "Cash": Account("Cash", "Asset"),
 
-    "Consulting Revenue": Account(
-        "Consulting Revenue",
-        "Income",
-        tax_line="Schedule C – Line 1 (Gross receipts)",
-        source="US",
-        character="ECI"
-    ),
+st.header("2. Income (1040-NR)")
 
-    "Advertising Expense": Account(
-        "Advertising Expense",
-        "Expense",
-        tax_line="Schedule C – Line 18 (Advertising)",
-        source="US",
-        character="ECI"
-    ),
+st.subheader("Effectively Connected Income (ECI)")
 
-    "Foreign Dividend": Account(
-        "Foreign Dividend",
-        "Income",
-        tax_line="Schedule B – Interest & Dividends",
-        source="FOREIGN",
-        character="FDAP"
-    )
-}
-
-load_sample_data(accounts)
-
-# -----------------------------
-# DASHBOARD
-# -----------------------------
-st.subheader("Dashboard")
-
-income = sum(
-    a.balance for a in accounts.values()
-    if a.type == "Income" and include_income(a, tax_form)
+wages_us = st.number_input(
+    "US W-2 Wages (Line 1a)",
+    min_value=0.0,
+    step=100.0
 )
 
-expenses = sum(
-    a.balance for a in accounts.values()
-    if a.type == "Expense"
+business_income = st.number_input(
+    "Schedule C Net Income (ECI)",
+    min_value=0.0,
+    step=100.0
 )
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Included Income", f"${abs(income):,.0f}")
-col2.metric("Expenses", f"${expenses:,.0f}")
-col3.metric("Net", f"${abs(income) - expenses:,.0f}")
+st.subheader("Other US Income")
+
+capital_gains = st.number_input(
+    "US Capital Gains",
+    min_value=0.0,
+    step=100.0
+)
+
+fdap_income = st.number_input(
+    "US FDAP Income (Dividends, Interest)",
+    min_value=0.0,
+    step=100.0
+)
+
+income = Income1040NR(
+    wages_us=wages_us,
+    business_income_eci=business_income,
+    capital_gains_us=capital_gains,
+    fdap_income_us=fdap_income
+)
 
 # -----------------------------
-# SCHEDULE C (FREELANCER ONLY)
+# SECTION 3 — DEDUCTIONS
 # -----------------------------
-if persona == "Freelancer":
-    st.subheader("Schedule C (Draft)")
 
-    schedule_c = generate_schedule_c(accounts.values(), tax_form)
+st.header("3. Deductions (Limited for 1040-NR)")
 
-    if not schedule_c:
-        st.info("No Schedule C income included under current tax profile.")
-    else:
-        for line, amt in schedule_c.items():
-            st.write(f"**{line}**: ${abs(amt):,.0f}")
+state_taxes = st.number_input(
+    "State & Local Taxes Paid",
+    min_value=0.0,
+    step=100.0
+)
 
-# -----------------------------
-# ACCOUNT BALANCES (AUDIT VIEW)
-# -----------------------------
-st.subheader("Account Balances (Ledger View)")
+charity = st.number_input(
+    "Charitable Contributions",
+    min_value=0.0,
+    step=100.0
+)
 
-for acc in accounts.values():
-    st.write(
-        f"{acc.name} — {acc.type}: "
-        f"${acc.balance:,.2f} "
-        f"({acc.source or '—'})"
-    )
+deductions = Deductions1040NR(
+    state_taxes=state_taxes,
+    charitable_contributions=charity
+)
 
 # -----------------------------
-# EDUCATIONAL FOOTER
+# SECTION 4 — PAYMENTS
 # -----------------------------
+
+st.header("4. Payments & Withholding")
+
+withholding_w2 = st.number_input(
+    "W-2 Federal Withholding",
+    min_value=0.0,
+    step=100.0
+)
+
+withholding_1042s = st.number_input(
+    "1042-S Withholding",
+    min_value=0.0,
+    step=100.0
+)
+
+estimated = st.number_input(
+    "Estimated Tax Payments",
+    min_value=0.0,
+    step=100.0
+)
+
+payments = Payments1040NR(
+    withholding_w2=withholding_w2,
+    withholding_1042s=withholding_1042s,
+    estimated_payments=estimated
+)
+
+# -----------------------------
+# BUILD RETURN OBJECT
+# -----------------------------
+
+tax_return = TaxReturn1040NR(
+    taxpayer=taxpayer,
+    income=income,
+    deductions=deductions,
+    payments=payments
+)
+
+# -----------------------------
+# SECTION 5 — REVIEW
+# -----------------------------
+
+st.header("5. Review Summary")
+
+st.metric("Total ECI Income", f"${tax_return.total_eci_income():,.2f}")
+st.metric("Total FDAP Income", f"${tax_return.total_fdap_income():,.2f}")
+st.metric("Adjusted Gross Income (AGI)", f"${tax_return.adjusted_gross_income():,.2f}")
+
+# -----------------------------
+# SECTION 6 — DOWNLOAD
+# -----------------------------
+
+st.header("6. Download Draft Return")
+
+return_json = json.dumps(asdict(tax_return), indent=2)
+
+st.download_button(
+    label="Download 1040-NR Draft (JSON)",
+    data=return_json,
+    file_name="1040NR_draft.json",
+    mime="application/json"
+)
+
 st.caption(
-    "One ledger • Corporate-grade accounting • "
-    "1040 vs 1040-NR handled via tax rules, not separate systems."
+    "This file represents the structured source-of-truth for your return. "
+    "PDF generation and e-file can be layered on later."
 )
