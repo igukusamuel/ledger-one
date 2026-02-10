@@ -5,6 +5,11 @@ from core.accruals import accrued_interest
 from core.journals import generate_accrual_journal
 
 from core.periods import is_period_open
+from core.batch import batch_accruals
+
+from core.reconciliation import accrual_cash_recon
+
+
 
 
 # ---------- Helpers ----------
@@ -61,6 +66,10 @@ def manual_entry_ui():
             )
             st.success("Manual journal posted.")
 
+
+
+
+
 # ---------- NEW: Accrual Section ----------
 
 def accrual_ui():
@@ -90,6 +99,24 @@ def accrual_ui():
         st.session_state.journal_entries.extend(journals)
         st.success(f"Accrued interest posted: {accrual_amount}")
 
+    if st.button("Generate Month-End Accruals"):
+        journals = batch_accruals(
+            start_date=st.session_state["last_coupon_date"],
+            end_date=date.today(),
+            accrual_func=lambda d: generate_accrual_journal(
+                d,
+                accrued_interest(
+                    st.session_state["last_coupon_date"],
+                    d,
+                    st.session_state["coupon_amount"]
+                )
+            )
+        )
+    
+        st.session_state.journal_entries.extend(journals)
+        st.success("Batch accruals generated.")
+
+
 # ---------- period close ----------
 
 def period_close_ui():
@@ -113,6 +140,11 @@ def trial_balance_ui():
         {"Account": k, "Balance": round(v, 2)}
         for k, v in tb.items()
     ])
+
+    st.subheader("Accrual vs Cash Reconciliation")
+    
+    recon = accrual_cash_recon(st.session_state.journal_entries)
+    st.table(recon)
 
 ---------- Coupon payment ----------
 
