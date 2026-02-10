@@ -2,7 +2,12 @@ import streamlit as st
 import pandas as pd
 from core.models import BondTrade
 
+def init_trade_capture():
+    if "trades" not in st.session_state:
+        st.session_state.trades = []
+
 def render():
+    init_trade_capture()
     st.header("Trade Capture — Plain Vanilla Bond")
 
     c1, c2 = st.columns(2)
