@@ -4,6 +4,9 @@ from datetime import date
 from core.accruals import accrued_interest
 from core.journals import generate_accrual_journal
 
+from core.periods import is_period_open
+
+
 # ---------- Helpers ----------
 
 def init_subledger():
@@ -58,14 +61,17 @@ def manual_entry_ui():
 # ---------- NEW: Accrual Section ----------
 
 def accrual_ui():
-    st.subheader("Interest Accrual (System Generated)")
-
-    if "last_coupon_date" not in st.session_state:
-        st.warning("No trade data available for accruals.")
-        return
+    st.subheader("Interest Accrual")
 
     if st.button("Generate Daily Accrual"):
         valuation_date = date.today()
+
+        if not is_period_open(
+            valuation_date,
+            st.session_state["closed_periods"]
+        ):
+            st.error("Accounting period is closed. Accruals are locked.")
+            return
 
         accrual_amount = accrued_interest(
             last_coupon_date=st.session_state["last_coupon_date"],
@@ -79,8 +85,8 @@ def accrual_ui():
         )
 
         st.session_state.journal_entries.extend(journals)
-
         st.success(f"Accrued interest posted: {accrual_amount}")
+
 
 # ---------- Trial Balance ----------
 
