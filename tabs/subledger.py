@@ -187,5 +187,5 @@ def render():
     show_journals()
     manual_entry_ui()
     accrual_ui()
-    period_close_ui()     # ← ADD THIS LINE
+    period_close_ui()
     trial_balance_ui()
