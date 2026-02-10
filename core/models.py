@@ -46,3 +46,11 @@ class Income1040NR:
     business_income_eci: float = 0.0
     capital_gains_us: float = 0.0
     fdap_income_us: float = 0.0
+
+
+@dataclass
+class TradeLifecycle:
+    status: str  # OPEN / SOLD / MATURED
+    termination_date: date | None = None
+    termination_price: float | None = None
+
