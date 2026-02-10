@@ -1,268 +1,172 @@
 import streamlit as st
-from dataclasses import dataclass, asdict
-import json
+import pandas as pd
+from dataclasses import dataclass
+from datetime import date
+import io
+
+st.set_page_config(page_title="LedgerOne", layout="wide")
 
 # =====================================================
-# CONFIG
+# DATA MODELS
 # =====================================================
 
-st.set_page_config(
-    page_title="LedgerOne",
-    layout="centered"
+@dataclass
+class BondTrade:
+    trade_id: str
+    trade_date: date
+    maturity_date: date
+    face_value: float
+    coupon_rate: float
+    price: float
+    direction: str  # Buy / Sell
+
+
+@dataclass
+class JournalEntry:
+    account: str
+    debit: float
+    credit: float
+    memo: str
+
+
+# =====================================================
+# SESSION STATE
+# =====================================================
+
+if "trades" not in st.session_state:
+    st.session_state.trades = []
+
+if "journal_entries" not in st.session_state:
+    st.session_state.journal_entries = []
+
+# =====================================================
+# TABS
+# =====================================================
+
+tab1, tab2, tab3 = st.tabs(
+    ["📈 Trade Capture System", "📒 Subledger", "📊 General Ledger"]
 )
 
 # =====================================================
-# DATA MODELS (CANONICAL SOURCE OF TRUTH)
+# TAB 1 — TRADE CAPTURE
 # =====================================================
 
-@dataclass
-class TaxpayerInfo:
-    first_name: str
-    last_name: str
-    country_of_residence: str
-    filing_status: str
+with tab1:
+    st.header("Trade Capture — Plain Vanilla Bond")
 
+    c1, c2 = st.columns(2)
 
-@dataclass
-class Income1040:
-    wages: float = 0.0
-    interest: float = 0.0
-    dividends: float = 0.0
-    capital_gains: float = 0.0
+    trade_id = c1.text_input("Trade ID")
+    direction = c2.selectbox("Direction", ["Buy", "Sell"])
 
+    trade_date = c1.date_input("Trade Date")
+    maturity_date = c2.date_input("Maturity Date")
 
-@dataclass
-class Income1040NR:
-    wages_us: float = 0.0
-    business_income_eci: float = 0.0
-    capital_gains_us: float = 0.0
-    fdap_income_us: float = 0.0
+    face_value = c1.number_input("Face Value", min_value=0.0, step=1000.0)
+    coupon = c2.number_input("Coupon Rate (%)", min_value=0.0, step=0.25)
 
+    price = st.number_input("Clean Price (%)", min_value=0.0, step=0.1)
 
-@dataclass
-class Payments:
-    withholding: float = 0.0
-    estimated_payments: float = 0.0
+    if st.button("Capture Trade"):
+        trade = BondTrade(
+            trade_id=trade_id,
+            trade_date=trade_date,
+            maturity_date=maturity_date,
+            face_value=face_value,
+            coupon_rate=coupon,
+            price=price,
+            direction=direction
+        )
+        st.session_state.trades.append(trade)
+        st.success("Trade captured successfully")
 
+    if st.session_state.trades:
+        st.subheader("Captured Trades")
+        st.dataframe(pd.DataFrame([t.__dict__ for t in st.session_state.trades]))
 
-@dataclass
-class TaxReturn1040:
-    taxpayer: TaxpayerInfo
-    income: Income1040
-    payments: Payments
+# =====================================================
+# TAB 2 — SUBLEDGER
+# =====================================================
 
-    def agi(self) -> float:
-        return (
-            self.income.wages
-            + self.income.interest
-            + self.income.dividends
-            + self.income.capital_gains
+with tab2:
+    st.header("Subledger — Instrument Accounting")
+
+    if not st.session_state.trades:
+        st.info("No trades captured yet.")
+    else:
+        trade = st.session_state.trades[-1]
+
+        st.subheader(f"Expected Cashflows for Trade {trade.trade_id}")
+
+        coupon_cf = trade.face_value * trade.coupon_rate / 100
+        principal_cf = trade.face_value
+
+        cashflows = pd.DataFrame(
+            {
+                "Date": [trade.maturity_date, trade.maturity_date],
+                "Type": ["Coupon", "Principal"],
+                "Amount": [coupon_cf, principal_cf],
+            }
         )
 
+        st.dataframe(cashflows)
 
-@dataclass
-class TaxReturn1040NR:
-    taxpayer: TaxpayerInfo
-    income: Income1040NR
-    payments: Payments
+    st.subheader("Manual Journal Entry")
 
-    def eci_income(self) -> float:
-        return self.income.wages_us + self.income.business_income_eci
+    acc = st.text_input("Account")
+    debit = st.number_input("Debit", min_value=0.0, step=100.0)
+    credit = st.number_input("Credit", min_value=0.0, step=100.0)
+    memo = st.text_input("Memo")
 
-    def agi(self) -> float:
-        return self.eci_income() + self.income.capital_gains_us
+    if st.button("Post Entry"):
+        je = JournalEntry(acc, debit, credit, memo)
+        st.session_state.journal_entries.append(je)
+        st.success("Journal entry posted")
 
-
-# =====================================================
-# SIDEBAR — FORM SELECTION
-# =====================================================
-
-st.sidebar.header("Return Type")
-
-return_type = st.sidebar.selectbox(
-    "Select Tax Form",
-    ["1040 (Resident)", "1040-NR (Nonresident)"]
-)
-
-st.sidebar.divider()
-st.sidebar.caption("One system • Different tax views")
+    if st.session_state.journal_entries:
+        st.subheader("Posted Journal Entries")
+        st.dataframe(pd.DataFrame([j.__dict__ for j in st.session_state.journal_entries]))
 
 # =====================================================
-# HEADER
+# TAB 3 — GENERAL LEDGER
 # =====================================================
 
-st.title("LedgerOne — Individual Tax Prototype")
-st.caption("Corporate-grade architecture · Personal & Nonresident tax")
+with tab3:
+    st.header("General Ledger & Financial Statements")
 
-# =====================================================
-# TAXPAYER INFO
-# =====================================================
+    if not st.session_state.journal_entries:
+        st.info("No accounting entries available.")
+    else:
+        df = pd.DataFrame([j.__dict__ for j in st.session_state.journal_entries])
 
-st.header("1. Taxpayer Information")
+        tb = (
+            df.groupby("account")[["debit", "credit"]]
+            .sum()
+            .assign(balance=lambda x: x.debit - x.credit)
+            .reset_index()
+        )
 
-c1, c2 = st.columns(2)
+        st.subheader("Trial Balance")
+        st.dataframe(tb)
 
-first_name = c1.text_input("First Name")
-last_name = c2.text_input("Last Name")
+        income_stmt = tb[tb["account"].str.contains("Revenue|Expense", case=False)]
+        balance_sheet = tb[~tb.index.isin(income_stmt.index)]
 
-country = st.text_input("Country of Residence")
-filing_status = st.selectbox(
-    "Filing Status",
-    ["Single", "Married Filing Jointly", "Married Filing Separately", "Other"]
-)
+        st.subheader("Income Statement (Mock)")
+        st.dataframe(income_stmt)
 
-taxpayer = TaxpayerInfo(
-    first_name=first_name,
-    last_name=last_name,
-    country_of_residence=country,
-    filing_status=filing_status
-)
+        st.subheader("Balance Sheet (Mock)")
+        st.dataframe(balance_sheet)
 
-# =====================================================
-# INCOME SECTION (DYNAMIC)
-# =====================================================
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            tb.to_excel(writer, sheet_name="Trial Balance", index=False)
+            income_stmt.to_excel(writer, sheet_name="Income Statement", index=False)
+            balance_sheet.to_excel(writer, sheet_name="Balance Sheet", index=False)
 
-st.header("2. Income")
-
-if return_type == "1040 (Resident)":
-    wages = st.number_input("Wages (W-2)", min_value=0.0, step=100.0)
-    interest = st.number_input("Interest Income", min_value=0.0, step=50.0)
-    dividends = st.number_input("Dividend Income", min_value=0.0, step=50.0)
-    cap_gains = st.number_input("Capital Gains", min_value=0.0, step=100.0)
-
-    income = Income1040(
-        wages=wages,
-        interest=interest,
-        dividends=dividends,
-        capital_gains=cap_gains
-    )
-
-else:
-    wages_us = st.number_input("US W-2 Wages (ECI)", min_value=0.0, step=100.0)
-    business_eci = st.number_input("Schedule C Net Income (ECI)", min_value=0.0, step=100.0)
-    cap_gains_us = st.number_input("US Capital Gains", min_value=0.0, step=100.0)
-    fdap = st.number_input("US FDAP Income", min_value=0.0, step=100.0)
-
-    income = Income1040NR(
-        wages_us=wages_us,
-        business_income_eci=business_eci,
-        capital_gains_us=cap_gains_us,
-        fdap_income_us=fdap
-    )
-
-# =====================================================
-# PAYMENTS
-# =====================================================
-
-st.header("3. Payments")
-
-withholding = st.number_input("Federal Withholding", min_value=0.0, step=100.0)
-estimated = st.number_input("Estimated Payments", min_value=0.0, step=100.0)
-
-payments = Payments(
-    withholding=withholding,
-    estimated_payments=estimated
-)
-
-# =====================================================
-# BUILD RETURN
-# =====================================================
-
-if return_type == "1040 (Resident)":
-    tax_return = TaxReturn1040(
-        taxpayer=taxpayer,
-        income=income,
-        payments=payments
-    )
-    agi = tax_return.agi()
-else:
-    tax_return = TaxReturn1040NR(
-        taxpayer=taxpayer,
-        income=income,
-        payments=payments
-    )
-    agi = tax_return.agi()
-
-# =====================================================
-# REVIEW
-# =====================================================
-
-st.header("4. Review")
-
-st.metric("Adjusted Gross Income (AGI)", f"${agi:,.2f}")
-
-# =====================================================
-# DOWNLOADS
-# =====================================================
-
-st.header("5. Download")
-
-user_return_json = json.dumps(asdict(tax_return), indent=2)
-
-st.download_button(
-    "Download Your Draft Return (JSON)",
-    data=user_return_json,
-    file_name="tax_return_draft.json",
-    mime="application/json"
-)
-
-# -----------------------------
-# SAMPLE RETURNS
-# -----------------------------
-
-sample_1040 = {
-    "taxpayer": {
-        "first_name": "John",
-        "last_name": "Doe",
-        "country_of_residence": "United States",
-        "filing_status": "Single"
-    },
-    "income": {
-        "wages": 85000,
-        "interest": 500,
-        "dividends": 1200,
-        "capital_gains": 4000
-    },
-    "payments": {
-        "withholding": 14000,
-        "estimated_payments": 0
-    }
-}
-
-sample_1040nr = {
-    "taxpayer": {
-        "first_name": "Jane",
-        "last_name": "Smith",
-        "country_of_residence": "United Kingdom",
-        "filing_status": "Single"
-    },
-    "income": {
-        "wages_us": 42000,
-        "business_income_eci": 18000,
-        "capital_gains_us": 3000,
-        "fdap_income_us": 2500
-    },
-    "payments": {
-        "withholding": 9000,
-        "estimated_payments": 0
-    }
-}
-
-st.download_button(
-    "Download Sample 1040 (Filled)",
-    data=json.dumps(sample_1040, indent=2),
-    file_name="sample_1040.json",
-    mime="application/json"
-)
-
-st.download_button(
-    "Download Sample 1040-NR (Filled)",
-    data=json.dumps(sample_1040nr, indent=2),
-    file_name="sample_1040nr.json",
-    mime="application/json"
-)
-
-st.caption(
-    "These JSON files are the system source-of-truth. "
-    "PDF rendering and IRS e-file can be layered on without redesign."
-)
+        st.download_button(
+            "Download Financial Statements (Excel)",
+            data=output.getvalue(),
+            file_name="financial_statements.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
