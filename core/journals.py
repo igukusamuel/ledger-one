@@ -8,3 +8,5 @@ class JournalEntry:
     debit: float = 0.0
     credit: float = 0.0
     description: str = ""
+    source: str = "SYSTEM"  # SYSTEM / MANUAL
+    trade_id: str | None = None
