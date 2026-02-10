@@ -13,6 +13,9 @@ def init_subledger():
     if "journal_entries" not in st.session_state:
         st.session_state.journal_entries = []
 
+    if "closed_periods" not in st.session_state:
+        st.session_state.closed_periods = set()
+
 def show_journals():
     st.subheader("Journal Entries")
     if not st.session_state.journal_entries:
@@ -87,6 +90,15 @@ def accrual_ui():
         st.session_state.journal_entries.extend(journals)
         st.success(f"Accrued interest posted: {accrual_amount}")
 
+# ---------- period close ----------
+
+def period_close_ui():
+    st.subheader("Period Close")
+
+    if st.button("Close Today"):
+        st.session_state.closed_periods.add(date.today())
+        st.success("Accounting period closed.")
+
 
 # ---------- Trial Balance ----------
 
@@ -142,5 +154,6 @@ def render():
     init_subledger()
     show_journals()
     manual_entry_ui()
-    accrual_ui()        # ← INSERTED, NOT REPLACED
+    accrual_ui()
+    period_close_ui()     # ← ADD THIS LINE
     trial_balance_ui()
