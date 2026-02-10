@@ -96,6 +96,40 @@ def trial_balance_ui():
         for k, v in tb.items()
     ])
 
+---------- Coupon payment ----------
+
+def coupon_payment_ui():
+    st.subheader("Coupon Payment")
+
+    if st.button("Post Coupon Payment"):
+        payment_date = date.today()
+        coupon_amount = st.session_state["coupon_amount"]
+
+        # Reverse all open accruals
+        accruals = [
+            j for j in st.session_state.journal_entries
+            if j.account == "Interest Receivable" and j.source == "SYSTEM"
+        ]
+
+        for a in accruals:
+            st.session_state.journal_entries.append(
+                reverse_accrual(a, payment_date)
+            )
+
+        # Cash receipt
+        st.session_state.journal_entries.append(
+            JournalEntry(
+                date=payment_date,
+                account="Cash",
+                debit=coupon_amount,
+                description="Coupon received",
+                source="SYSTEM"
+            )
+        )
+
+        st.success("Coupon payment posted and accruals reversed.")
+
+
 # ---------- Main Render ----------
 
 def render():
