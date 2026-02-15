@@ -7,6 +7,40 @@ from core.persistence import load_journals, save_journals
 from core.journals import JournalEntry
 from core.entities import get_entities
 
+st.subheader("Add Items to Cart")
+
+sku = st.selectbox("SKU", ["LATTE", "CROISSANT"], key="sku")
+price = st.number_input("Unit Price", min_value=0.0, key="price")
+quantity = st.number_input("Quantity", min_value=1, key="qty")
+
+if "cart" not in st.session_state:
+    st.session_state.cart = []
+
+if st.button("Add to Cart"):
+    st.session_state.cart.append({
+        "sku": sku,
+        "price": price,
+        "quantity": quantity
+    })
+
+st.write("Cart:", st.session_state.cart)
+
+tax_rate = st.number_input("Sales Tax Rate (e.g. 0.08)", value=0.08)
+
+if st.button("Finalize Sale"):
+
+    journals, total = record_sale(entity_id, st.session_state.cart, tax_rate)
+
+    for j in journals:
+        j.entry_date = str(sale_date)
+
+    all_journals = load_journals(JournalEntry)
+    all_journals.extend(journals)
+    save_journals(all_journals)
+
+    st.success(f"Sale completed. Total charged: {round(total,2)}")
+
+    st.session_state.cart = []
 
 def render():
 
