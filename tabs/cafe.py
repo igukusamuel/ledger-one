@@ -56,91 +56,138 @@ def pos_screen():
 
     inventory = get_inventory()
 
-    if inventory is None or inventory.empty:
-        st.warning("Inventory empty.")
+    if inventory.empty:
+        st.warning("No products available.")
         return
 
-    col1, col2 = st.columns([2, 1])
+    col_products, col_cart = st.columns([2, 1])
 
-    # LEFT SIDE PRODUCTS
-    with col1:
+    # --------------------------------------------------
+    # LEFT SIDE — PRODUCTS
+    # --------------------------------------------------
+    with col_products:
 
         st.subheader("Products")
 
         categories = inventory["category"].unique()
-        category = st.selectbox("Category", categories, key="cafe_cat")
+        selected_category = st.selectbox("Category", categories)
 
-        subcategories = inventory[inventory["category"] == category]["subcategory"].unique()
-        subcategory = st.selectbox("Subcategory", subcategories, key="cafe_subcat")
+        subcategories = inventory[
+            inventory["category"] == selected_category
+        ]["subcategory"].unique()
+
+        selected_subcategory = st.selectbox("Subcategory", subcategories)
 
         filtered = inventory[
-            (inventory["category"] == category) &
-            (inventory["subcategory"] == subcategory)
+            (inventory["category"] == selected_category) &
+            (inventory["subcategory"] == selected_subcategory)
         ]
 
         for _, row in filtered.iterrows():
 
-            if st.button(f"{row['product']} - ${row['price']}", key=f"btn_{row['product']}"):
+            stock_level = row["stock"]
 
-                st.session_state.cafe_cart.append({
-                    "product": row["product"],
-                    "price": row["price"],
-                    "cost": row["cost"],
-                    "quantity": 1
-                })
+            col_item, col_qty = st.columns([3, 1])
 
-                st.rerun()
+            with col_item:
+                st.write(f"**{row['product']}**  —  ${row['price']}")
 
-    # RIGHT SIDE CART
-    with col2:
+                if stock_level <= 5:
+                    st.caption(f"⚠ Low stock: {stock_level}")
+                else:
+                    st.caption(f"In stock: {stock_level}")
+
+            with col_qty:
+
+                quantity = st.number_input(
+                    "",
+                    min_value=1,
+                    max_value=stock_level if stock_level > 0 else 1,
+                    value=1,
+                    key=f"qty_{row['product']}"
+                )
+
+                if st.button("Add", key=f"add_{row['product']}"):
+
+                    if stock_level < quantity:
+                        st.error("Not enough stock.")
+                    else:
+
+                        st.session_state.cart.append({
+                            "product": row["product"],
+                            "price": row["price"],
+                            "quantity": quantity,
+                            "total": row["price"] * quantity,
+                            "cogs": row["cost"] * quantity  # hidden internally
+                        })
+
+                        st.success(f"{row['product']} added")
+
+    # --------------------------------------------------
+    # RIGHT SIDE — CART
+    # --------------------------------------------------
+    with col_cart:
 
         st.subheader("Cart")
 
-        if st.session_state.cafe_cart:
-
-            df = pd.DataFrame(st.session_state.cafe_cart)
-            df["total"] = df["price"] * df["quantity"]
-
-            st.dataframe(df)
-
-            subtotal = df["total"].sum()
-            tax = subtotal * 0.07
-            total = subtotal + tax
-            total_cogs = (df["cost"] * df["quantity"]).sum()
-
-            st.write(f"Subtotal: ${subtotal:.2f}")
-            st.write(f"Tax: ${tax:.2f}")
-            st.write(f"Total: ${total:.2f}")
-
-            payment = st.selectbox("Payment", ["Cash", "Card"], key="cafe_payment")
-
-            if st.button("Checkout", key="cafe_checkout"):
-
-                for item in st.session_state.cafe_cart:
-                    update_inventory(item["product"], item["quantity"])
-
-                post_sale_to_gl(
-                    entity_id="CAFE",
-                    total=total,
-                    tax=tax,
-                    revenue=subtotal,
-                    cogs=total_cogs,
-                    payment_type=payment
-                )
-
-                st.session_state.cafe_sales.append({
-                    "time": datetime.now(),
-                    "total": total
-                })
-
-                st.session_state.cafe_cart = []
-
-                st.success("Sale Completed")
-                st.rerun()
-
-        else:
+        if not st.session_state.cart:
             st.info("Cart empty.")
+            return
 
+        df = pd.DataFrame(st.session_state.cart)
+
+        # Only show customer-facing columns
+        display_df = df[["product", "quantity", "price", "total"]]
+
+        st.dataframe(display_df, use_container_width=True)
+
+        subtotal = df["total"].sum()
+        tax = round(subtotal * 0.07, 2)
+        total = round(subtotal + tax, 2)
+        total_cogs = df["cogs"].sum()
+
+        st.markdown("---")
+        st.write(f"Subtotal: ${subtotal}")
+        st.write(f"Sales Tax (7%): ${tax}")
+        st.write(f"**Total: ${total}**")
+
+        payment = st.selectbox("Payment Type", ["Cash", "Card"])
+
+        if st.button("Checkout"):
+
+            # Stock validation (double check)
+            for item in st.session_state.cart:
+                stock = inventory.loc[
+                    inventory["product"] == item["product"],
+                    "stock"
+                ].values[0]
+
+                if stock < item["quantity"]:
+                    st.error(f"Insufficient stock for {item['product']}")
+                    return
+
+            # Reduce inventory
+            for item in st.session_state.cart:
+                update_inventory(item["product"], item["quantity"])
+
+            # Post to GL
+            post_sale_to_gl(
+                entity_id="CAFE",
+                total=total,
+                tax=tax,
+                revenue=subtotal,
+                cogs=total_cogs,
+                payment_type=payment
+            )
+
+            st.session_state.daily_sales.append({
+                "time": datetime.now(),
+                "total": total
+            })
+
+            st.success("Sale Completed")
+            st.session_state.cart = []
+            st.rerun()
 
 # --------------------------------------------------
 # MAIN
