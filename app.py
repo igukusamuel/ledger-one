@@ -5,7 +5,8 @@ from tabs.subledger import render as subledger_render
 from tabs.general_ledger import render as gl_render
 from tabs.tax import render as tax_render
 from tabs.cafe import render as cafe_render
-
+from core.persistence import initialize_db
+initialize_db()
 
 st.set_page_config(layout="wide")
 st.title("LedgerOne ERP System")
