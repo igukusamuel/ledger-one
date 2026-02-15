@@ -1,44 +1,66 @@
+import sqlite3
 import pandas as pd
-from core.persistence import load_inventory, save_inventory
 
-# Demo inventory
-INVENTORY = pd.DataFrame([
-    {"Product": "Espresso", "Price": 3.00, "Stock": 100},
-    {"Product": "Latte", "Price": 4.50, "Stock": 100},
-    {"Product": "Cappuccino", "Price": 4.00, "Stock": 100},
-    {"Product": "Blueberry Muffin", "Price": 2.75, "Stock": 50},
-])
+DB_PATH = "data/ledger.db"
+
+
+def init_inventory():
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS inventory (
+            product TEXT PRIMARY KEY,
+            category TEXT,
+            price REAL,
+            cost REAL,
+            stock INTEGER
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def seed_inventory():
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM inventory")
+    count = cursor.fetchone()[0]
+
+    if count == 0:
+        cursor.executemany("""
+            INSERT INTO inventory VALUES (?, ?, ?, ?, ?)
+        """, [
+            ("Espresso", "Beverage", 3.00, 1.00, 100),
+            ("Latte", "Beverage", 4.50, 1.50, 100),
+            ("Cappuccino", "Beverage", 4.00, 1.40, 100),
+            ("Blueberry Muffin", "Bakery", 2.75, 1.00, 50),
+        ])
+        conn.commit()
+
+    conn.close()
 
 
 def get_inventory():
-    return INVENTORY
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql_query("SELECT * FROM inventory", conn)
+    conn.close()
+    return df
+
 
 def update_inventory(product, quantity):
-    INVENTORY.loc[INVENTORY["Product"] == product, "Stock"] -= quantity
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
 
-def update_inventory(sku, quantity_sold):
-    inventory = load_inventory()
+    cursor.execute("""
+        UPDATE inventory
+        SET stock = stock - ?
+        WHERE product = ?
+    """, (quantity, product))
 
-    if sku not in inventory:
-        raise Exception("SKU not found")
-
-    inventory[sku]["quantity"] -= quantity_sold
-
-    if inventory[sku]["quantity"] < 0:
-        raise Exception("Negative inventory not allowed")
-
-    save_inventory(inventory)
-
-    return inventory[sku]["unit_cost"] * quantity_sold
-
-
-def add_inventory_item(sku, name, quantity, unit_cost):
-    inventory = load_inventory()
-
-    inventory[sku] = {
-        "name": name,
-        "quantity": quantity,
-        "unit_cost": unit_cost
-    }
-
-    save_inventory(inventory)
+    conn.commit()
+    conn.close()
