@@ -8,7 +8,27 @@ from core.batch import batch_accruals
 from core.gl import post_to_gl, generate_trial_balance
 from core.persistence import load_journals, save_journals
 from core.audit import log_action
+from core.chart_of_accounts import get_account_type
 
+if st.button("Post Entry"):
+
+    if not get_account_type(debit):
+        st.error("Invalid debit account.")
+    elif not get_account_type(credit):
+        st.error("Invalid credit account.")
+    else:
+        journal = JournalEntry(
+            str(entry_date),
+            debit,
+            credit,
+            amount,
+            "Manual Entry"
+        )
+
+        st.session_state.journal_entries.append(journal)
+        save_journals(st.session_state.journal_entries)
+
+        st.success("Posted.")
 
 def init_subledger():
 
