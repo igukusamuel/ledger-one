@@ -4,14 +4,12 @@ from datetime import date
 
 @dataclass
 class JournalEntry:
-    date: date
-    account: str
-    debit: float = 0.0
-    credit: float = 0.0
-    description: str = ""
-    source: str = "SYSTEM"
-    trade_id: str | None = None
-
+    def __init__(self, entry_date, debit_account, credit_account, amount, description):
+        self.entry_date = entry_date
+        self.debit_account = debit_account
+        self.credit_account = credit_account
+        self.amount = amount
+        self.description = description
 
 def generate_accrual_journal(accrual_date: date, amount: float):
     return [
