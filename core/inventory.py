@@ -1,15 +1,10 @@
 import sqlite3
 import pandas as pd
-
 import os
 
 os.makedirs("data", exist_ok=True)
 DB_PATH = "data/ledger.db"
 
-
-# -----------------------------------
-# INIT TABLE
-# -----------------------------------
 
 def init_inventory():
     conn = sqlite3.connect(DB_PATH)
@@ -30,20 +25,12 @@ def init_inventory():
     conn.close()
 
 
-# -----------------------------------
-# GET INVENTORY
-# -----------------------------------
-
 def get_inventory():
     conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql_query("SELECT * FROM inventory", conn)
     conn.close()
     return df
 
-
-# -----------------------------------
-# ADD PRODUCT (Manager)
-# -----------------------------------
 
 def add_product(product, category, subcategory, price, cost, stock):
     conn = sqlite3.connect(DB_PATH)
@@ -57,10 +44,6 @@ def add_product(product, category, subcategory, price, cost, stock):
     conn.commit()
     conn.close()
 
-
-# -----------------------------------
-# UPDATE INVENTORY
-# -----------------------------------
 
 def update_inventory(product, quantity):
     conn = sqlite3.connect(DB_PATH)
