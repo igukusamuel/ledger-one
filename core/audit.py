@@ -5,7 +5,6 @@ DB_NAME = "ledger.db"
 
 
 def initialize_audit_table():
-
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
@@ -22,7 +21,6 @@ def initialize_audit_table():
 
 
 def log_action(action, details):
-
     initialize_audit_table()
 
     conn = sqlite3.connect(DB_NAME)
@@ -38,7 +36,6 @@ def log_action(action, details):
 
 
 def load_audit_log():
-
     initialize_audit_table()
 
     conn = sqlite3.connect(DB_NAME)
@@ -51,6 +48,7 @@ def load_audit_log():
     """)
 
     rows = cursor.fetchall()
+
     conn.close()
 
     return rows
