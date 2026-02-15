@@ -33,6 +33,11 @@ def seed_default_accounts():
         ("400000002", "Cafe Sales Revenue", "Revenue"),
         ("500000002", "Cost of Goods Sold", "Expense"),
         ("100000010", "Inventory", "Asset"),
+        ("200000010", "Sales Tax Payable", "Liability"),
+        ("100000020", "Inventory - Coffee Beans", "Asset"),
+        ("100000021", "Inventory - Pastries", "Asset"),
+        ("500000003", "COGS - Beverages", "Expense"),
+        ("500000004", "COGS - Food", "Expense"),
 
     ]
 
