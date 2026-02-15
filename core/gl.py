@@ -7,83 +7,87 @@ from core.chart_of_accounts import get_account_type
 # ---------------------------------------------------------
 
 def post_to_gl(journal_entries):
+    """
+    Returns GL balances by account,
+    respecting accounting normal balances.
+    """
 
-    gl = defaultdict(float)
+    ledger = defaultdict(lambda: {
+        "Debit": 0.0,
+        "Credit": 0.0
+    })
 
     for j in journal_entries:
+        ledger[j.debit_account]["Debit"] += j.amount
+        ledger[j.credit_account]["Credit"] += j.amount
 
-        # Debit increases
-        gl[j.debit_account] += j.amount
+    balances = {}
 
-        # Credit decreases
-        gl[j.credit_account] -= j.amount
+    for account, amounts in ledger.items():
 
-    return gl
+        account_type = get_account_type(account)
 
+        debit = amounts["Debit"]
+        credit = amounts["Credit"]
+
+        if account_type in ["Asset", "Expense"]:
+            balance = debit - credit
+        else:
+            balance = credit - debit
+
+        balances[account] = round(balance, 2)
+
+    return balances
 
 # =========================================================
 # FINANCIAL STATEMENTS ENGINE
 # =========================================================
 
-def generate_financial_statements(journal_entries):
+def generate_trial_balance(journal_entries):
     """
-    Generates:
-        - Income Statement
-        - Balance Sheet
-
-    Based on posted GL balances.
+    Returns trial balance lines grouped by account.
+    Output format:
+    [
+        {
+            "Account": str,
+            "Type": str,
+            "Debit": float,
+            "Credit": float,
+            "Balance": float
+        }
+    ]
     """
 
-    gl = post_to_gl(journal_entries)
+    tb = defaultdict(lambda: {
+        "Debit": 0.0,
+        "Credit": 0.0
+    })
 
-    income_statement = []
-    balance_sheet = []
+    for j in journal_entries:
+        tb[j.debit_account]["Debit"] += j.amount
+        tb[j.credit_account]["Credit"] += j.amount
 
-    total_revenue = 0
-    total_expense = 0
+    results = []
 
-    for account, balance in gl.items():
+    for account, amounts in tb.items():
 
         account_type = get_account_type(account)
 
-        if account_type == "Revenue":
-            income_statement.append({
-                "Account": account,
-                "Type": "Revenue",
-                "Balance": balance
-            })
-            total_revenue += balance
+        debit = amounts["Debit"]
+        credit = amounts["Credit"]
 
-        elif account_type == "Expense":
-            income_statement.append({
-                "Account": account,
-                "Type": "Expense",
-                "Balance": balance
-            })
-            total_expense += balance
+        # Normal balance logic
+        if account_type in ["Asset", "Expense"]:
+            balance = debit - credit
+        else:
+            balance = credit - debit
 
-        elif account_type in ["Asset", "Liability", "Equity"]:
-            balance_sheet.append({
-                "Account": account,
-                "Type": account_type,
-                "Balance": balance
-            })
+        results.append({
+            "Account": account,
+            "Type": account_type,
+            "Debit": round(debit, 2),
+            "Credit": round(credit, 2),
+            "Balance": round(balance, 2)
+        })
 
-    net_income = total_revenue - total_expense
-
-    # Add Net Income to Equity section of balance sheet
-    balance_sheet.append({
-        "Account": "Current Period Net Income",
-        "Type": "Equity",
-        "Balance": net_income
-    })
-
-    return {
-        "Income Statement": {
-            "Lines": income_statement,
-            "Total Revenue": total_revenue,
-            "Total Expense": total_expense,
-            "Net Income": net_income
-        },
-        "Balance Sheet": balance_sheet
-    }
+    return sorted(results, key=lambda x: x["Account"])
