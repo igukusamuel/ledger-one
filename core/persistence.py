@@ -3,6 +3,10 @@ import json
 import os
 from datetime import datetime
 
+# =========================================================
+# CONFIG
+# =========================================================
+
 DATA_DIR = "data"
 DB_NAME = os.path.join(DATA_DIR, "ledger.db")
 INVENTORY_FILE = os.path.join(DATA_DIR, "inventory.json")
@@ -55,15 +59,16 @@ def initialize_db():
         )
     """)
 
-    # ---------------- Entities ----------------
+    # ---------------- Entities (FIXED STRUCTURE) ----------------
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS entities (
             entity_id TEXT PRIMARY KEY,
+            entity_code TEXT,
             entity_name TEXT
         )
     """)
 
-    # ---------------- Audit ----------------
+    # ---------------- Audit Log ----------------
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS audit_log (
             timestamp TEXT,
@@ -74,6 +79,44 @@ def initialize_db():
 
     conn.commit()
     conn.close()
+
+
+# =========================================================
+# ENTITY MANAGEMENT
+# =========================================================
+
+def save_entity(entity_id, entity_code, entity_name):
+
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT OR REPLACE INTO entities
+        VALUES (?, ?, ?)
+    """, (entity_id, entity_code, entity_name))
+
+    conn.commit()
+    conn.close()
+
+
+def get_entities():
+
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT entity_id, entity_code, entity_name
+        FROM entities
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return rows
 
 
 # =========================================================
@@ -203,3 +246,42 @@ def save_inventory(data):
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(INVENTORY_FILE, "w") as f:
         json.dump(data, f, indent=4)
+
+
+# =========================================================
+# AUDIT LOG
+# =========================================================
+
+def log_action(action, details):
+
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO audit_log
+        VALUES (?, ?, ?)
+    """, (str(datetime.now()), action, details))
+
+    conn.commit()
+    conn.close()
+
+
+def load_audit_log():
+
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT timestamp, action, details
+        FROM audit_log
+        ORDER BY timestamp DESC
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return rows
