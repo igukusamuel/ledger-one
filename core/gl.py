@@ -1,4 +1,6 @@
 from collections import defaultdict
+from core.chart_of_accounts import get_account_type
+
 
 def post_to_gl(journal_entries):
 
@@ -36,12 +38,10 @@ def generate_financial_statements(journal_entries):
 
     for account, balance in gl.items():
 
-        if "Revenue" in account or "Income" in account:
-            income_statement[account] = balance
+        acc_type = get_account_type(account)
 
-        elif "Expense" in account:
+        if acc_type in ["Revenue", "Expense"]:
             income_statement[account] = balance
-
         else:
             balance_sheet[account] = balance
 
