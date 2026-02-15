@@ -1,17 +1,17 @@
-from core.persistence import load_inventory, save_inventory
+import pandas as pd
+
+# Demo inventory
+INVENTORY = pd.DataFrame([
+    {"Product": "Espresso", "Price": 3.00, "Stock": 100},
+    {"Product": "Latte", "Price": 4.50, "Stock": 100},
+    {"Product": "Cappuccino", "Price": 4.00, "Stock": 100},
+    {"Product": "Blueberry Muffin", "Price": 2.75, "Stock": 50},
+])
 
 
-def update_inventory(sku, quantity_sold):
-    inventory = load_inventory()
+def get_inventory():
+    return INVENTORY
 
-    if sku not in inventory:
-        raise Exception("SKU not found")
 
-    inventory[sku]["quantity"] -= quantity_sold
-
-    if inventory[sku]["quantity"] < 0:
-        raise Exception("Negative inventory not allowed")
-
-    save_inventory(inventory)
-
-    return inventory[sku]["unit_cost"] * quantity_sold
+def update_inventory(product, quantity):
+    INVENTORY.loc[INVENTORY["Product"] == product, "Stock"] -= quantity
