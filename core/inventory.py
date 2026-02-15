@@ -15,3 +15,15 @@ def update_inventory(sku, quantity_sold):
     save_inventory(inventory)
 
     return inventory[sku]["unit_cost"] * quantity_sold
+
+
+def add_inventory_item(sku, name, quantity, unit_cost):
+    inventory = load_inventory()
+
+    inventory[sku] = {
+        "name": name,
+        "quantity": quantity,
+        "unit_cost": unit_cost
+    }
+
+    save_inventory(inventory)
