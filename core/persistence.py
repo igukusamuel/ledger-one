@@ -1,124 +1,82 @@
 import sqlite3
 import json
-from datetime import date
+import os
 
-DB_NAME = "ledger.db"
-
+DB_NAME = "data/ledger.db"
 INVENTORY_FILE = "data/inventory.json"
 
+
+# -------------------------
+# Journals (SQLite)
+# -------------------------
+
+def initialize_db():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS journals (
+            entity_id TEXT,
+            entry_date TEXT,
+            debit_account TEXT,
+            credit_account TEXT,
+            amount REAL,
+            description TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def save_journals(journal_entries):
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    for j in journal_entries:
+        cursor.execute("""
+            INSERT INTO journals VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            j.entity_id,
+            j.entry_date,
+            j.debit_account,
+            j.credit_account,
+            j.amount,
+            j.description
+        ))
+
+    conn.commit()
+    conn.close()
+
+
+def load_journals(JournalEntry):
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM journals")
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [JournalEntry(*row) for row in rows]
+
+
+# -------------------------
+# Inventory (JSON)
+# -------------------------
+
 def load_inventory():
-    try:
-        with open(INVENTORY_FILE, "r") as f:
-            return json.load(f)
-    except:
+    if not os.path.exists(INVENTORY_FILE):
         return {}
+
+    with open(INVENTORY_FILE, "r") as f:
+        return json.load(f)
 
 
 def save_inventory(data):
+    os.makedirs("data", exist_ok=True)
     with open(INVENTORY_FILE, "w") as f:
         json.dump(data, f, indent=4)
-
-# ------------------------------------------
-# Database Connection
-# ------------------------------------------
-
-def get_connection():
-    return sqlite3.connect(DB_NAME, check_same_thread=False)
-
-
-# ------------------------------------------
-# Initialize Tables
-# ------------------------------------------
-
-def initialize_db():
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS trades (
-            trade_id TEXT PRIMARY KEY,
-            trade_data TEXT
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS journals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            journal_data TEXT
-        )
-    """)
-
-    conn.commit()
-    conn.close()
-
-
-# ------------------------------------------
-# Trade Persistence
-# ------------------------------------------
-
-def save_trades(trades):
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("DELETE FROM trades")
-
-    for trade in trades:
-        cur.execute(
-            "INSERT INTO trades (trade_id, trade_data) VALUES (?, ?)",
-            (trade["trade_id"], json.dumps(trade, default=str))
-        )
-
-    conn.commit()
-    conn.close()
-
-
-def load_trades():
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("SELECT trade_data FROM trades")
-    rows = cur.fetchall()
-
-    conn.close()
-
-    return [json.loads(row[0]) for row in rows]
-
-
-# ------------------------------------------
-# Journal Persistence
-# ------------------------------------------
-
-def save_journals(journals):
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("DELETE FROM journals")
-
-    for j in journals:
-        cur.execute(
-            "INSERT INTO journals (journal_data) VALUES (?)",
-            (json.dumps(j.__dict__, default=str),)
-        )
-
-    conn.commit()
-    conn.close()
-
-
-def load_journals(JournalEntryClass):
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("SELECT journal_data FROM journals")
-    rows = cur.fetchall()
-
-    conn.close()
-
-    journals = []
-
-    for row in rows:
-        data = json.loads(row[0])
-        journals.append(
-            JournalEntryClass(**data)
-        )
-
-    return journals
