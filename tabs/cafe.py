@@ -15,17 +15,18 @@ from core.pos_gl import post_sale_to_gl
 # INIT
 # --------------------------------------------------
 
-def init_pos():
+def init_cafe():
+
     init_inventory()
 
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
+    if "cafe_logged_in" not in st.session_state:
+        st.session_state.cafe_logged_in = False
 
-    if "cart" not in st.session_state:
-        st.session_state.cart = []
+    if "cafe_cart" not in st.session_state:
+        st.session_state.cafe_cart = []
 
-    if "daily_sales" not in st.session_state:
-        st.session_state.daily_sales = []
+    if "cafe_daily_sales" not in st.session_state:
+        st.session_state.cafe_daily_sales = []
 
 
 # --------------------------------------------------
@@ -34,45 +35,44 @@ def init_pos():
 
 def login():
 
-    st.title("☕ LedgerOne Café POS")
+    st.title("☕ LedgerOne Café")
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
+
         role = authenticate(username, password)
 
         if role:
-            st.session_state.logged_in = True
-            st.session_state.role = role
-            st.session_state.username = username
+            st.session_state.cafe_logged_in = True
+            st.session_state.cafe_role = role
+            st.session_state.cafe_username = username
             st.rerun()
         else:
             st.error("Invalid credentials")
 
 
 # --------------------------------------------------
-# STORE LAYOUT
+# STORE TERMINAL
 # --------------------------------------------------
 
 def store_terminal():
 
-    st.title("☕ Café Store")
-
-    # Sidebar (Far Left)
     st.sidebar.header("Navigation")
+
     menu = st.sidebar.radio(
         "Menu",
         ["POS Terminal", "End of Day", "Inventory Management"]
     )
 
     st.sidebar.markdown("---")
-    st.sidebar.write(f"User: {st.session_state.username}")
-    st.sidebar.write(f"Role: {st.session_state.role}")
+    st.sidebar.write(f"User: {st.session_state.cafe_username}")
+    st.sidebar.write(f"Role: {st.session_state.cafe_role}")
 
     if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.session_state.cart = []
+        st.session_state.cafe_logged_in = False
+        st.session_state.cafe_cart = []
         st.rerun()
 
     if menu == "POS Terminal":
@@ -94,12 +94,12 @@ def pos_screen():
     inventory = get_inventory()
 
     if inventory.empty:
-        st.warning("No products available.")
+        st.warning("No products available. Add products in Inventory Management.")
         return
 
-    col1, col2 = st.columns([2, 1])  # Left products, Right cart
+    col1, col2 = st.columns([2, 1])
 
-    # LEFT SIDE - PRODUCTS
+    # LEFT PANEL - PRODUCTS
     with col1:
 
         st.subheader("Products")
@@ -107,7 +107,10 @@ def pos_screen():
         categories = inventory["category"].unique()
         selected_category = st.selectbox("Category", categories)
 
-        subcategories = inventory[inventory["category"] == selected_category]["subcategory"].unique()
+        subcategories = inventory[
+            inventory["category"] == selected_category
+        ]["subcategory"].unique()
+
         selected_subcategory = st.selectbox("Subcategory", subcategories)
 
         filtered = inventory[
@@ -116,8 +119,11 @@ def pos_screen():
         ]
 
         for _, row in filtered.iterrows():
-            if st.button(f"{row['product']} - ${row['price']}", key=row['product']):
-                st.session_state.cart.append({
+            if st.button(
+                f"{row['product']} - ${row['price']}",
+                key=f"prod_{row['product']}"
+            ):
+                st.session_state.cafe_cart.append({
                     "product": row["product"],
                     "price": row["price"],
                     "cost": row["cost"],
@@ -125,15 +131,16 @@ def pos_screen():
                     "total": row["price"],
                     "cogs": row["cost"]
                 })
+                st.rerun()
 
-    # RIGHT SIDE - CART
+    # RIGHT PANEL - CART
     with col2:
 
         st.subheader("Cart")
 
-        if st.session_state.cart:
+        if st.session_state.cafe_cart:
 
-            df = pd.DataFrame(st.session_state.cart)
+            df = pd.DataFrame(st.session_state.cafe_cart)
             st.dataframe(df)
 
             subtotal = df["total"].sum()
@@ -149,7 +156,7 @@ def pos_screen():
 
             if st.button("Checkout"):
 
-                for item in st.session_state.cart:
+                for item in st.session_state.cafe_cart:
                     update_inventory(item["product"], item["quantity"])
 
                 post_sale_to_gl(
@@ -161,13 +168,13 @@ def pos_screen():
                     payment_type=payment
                 )
 
-                st.session_state.daily_sales.append({
+                st.session_state.cafe_daily_sales.append({
                     "time": datetime.now(),
                     "total": total
                 })
 
                 st.success("Sale Completed")
-                st.session_state.cart = []
+                st.session_state.cafe_cart = []
                 st.rerun()
 
         else:
@@ -175,12 +182,12 @@ def pos_screen():
 
 
 # --------------------------------------------------
-# INVENTORY MANAGEMENT (MANAGER ONLY)
+# INVENTORY MANAGEMENT
 # --------------------------------------------------
 
 def inventory_manager():
 
-    if st.session_state.role not in ["Owner", "Manager"]:
+    if st.session_state.cafe_role not in ["Owner", "Manager"]:
         st.error("Access restricted to Manager or Owner.")
         return
 
@@ -204,16 +211,16 @@ def inventory_manager():
 
 
 # --------------------------------------------------
-# END OF DAY
+# END OF DAY REPORT
 # --------------------------------------------------
 
 def z_report():
 
     st.subheader("End of Day Report")
 
-    if st.session_state.daily_sales:
+    if st.session_state.cafe_daily_sales:
 
-        df = pd.DataFrame(st.session_state.daily_sales)
+        df = pd.DataFrame(st.session_state.cafe_daily_sales)
         total_sales = df["total"].sum()
 
         st.write(f"Total Sales: ${round(total_sales,2)}")
@@ -233,9 +240,9 @@ def z_report():
 
 def render():
 
-    init_pos()
+    init_cafe()
 
-    if not st.session_state.logged_in:
+    if not st.session_state.cafe_logged_in:
         login()
     else:
         store_terminal()
