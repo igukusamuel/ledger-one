@@ -1,19 +1,30 @@
 from core.journals import JournalEntry
-from core.persistence import save_journals, load_journals
+from core.persistence import load_journals, save_journals
 
 
-def post_sale_to_gl(total, tax):
+def post_sale_to_gl(entity_id, total, tax, revenue, cogs, payment_type):
 
     journals = load_journals(JournalEntry)
 
-    # Debit Cash
+    cash_account = "100000001"
+    revenue_account = "400000001"
+    tax_account = "200000001"
+    inventory_account = "100000002"
+    cogs_account = "500000001"
+
+    # 1️⃣ Cash / Card
     journals.append(
-        JournalEntry("CAFE", str("POS"), "100000001", "400000001", total - tax, "POS Sale")
+        JournalEntry(entity_id, "POS", cash_account, revenue_account, revenue, "POS Sale")
     )
 
-    # Credit Sales Revenue
+    # 2️⃣ Tax
     journals.append(
-        JournalEntry("CAFE", str("POS"), "100000001", "200000001", tax, "Sales Tax Payable")
+        JournalEntry(entity_id, "POS", cash_account, tax_account, tax, "Sales Tax")
+    )
+
+    # 3️⃣ COGS
+    journals.append(
+        JournalEntry(entity_id, "POS", cogs_account, inventory_account, cogs, "COGS")
     )
 
     save_journals(journals)
