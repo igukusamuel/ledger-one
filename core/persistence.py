@@ -28,7 +28,40 @@ def initialize_db():
     conn.commit()
     conn.close()
 
+# ------------------------------------------
+# Trade Persistence
+# ------------------------------------------
 
+def save_trades(trades):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("DELETE FROM trades")
+
+    for trade in trades:
+        cur.execute(
+            "INSERT INTO trades (trade_id, trade_data) VALUES (?, ?)",
+            (trade["trade_id"], json.dumps(trade, default=str))
+        )
+
+    conn.commit()
+    conn.close()
+
+
+def load_trades():
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT trade_data FROM trades")
+    rows = cur.fetchall()
+
+    conn.close()
+
+    return [json.loads(row[0]) for row in rows]
+
+# ------------------------------------------
+# Journal Persistence
+# ------------------------------------------
 def save_journals(journal_entries):
     initialize_db()
 
@@ -62,37 +95,6 @@ def load_journals(JournalEntry):
     conn.close()
 
     return [JournalEntry(*row) for row in rows]
-
-# ------------------------------------------
-# Trade Persistence
-# ------------------------------------------
-
-def save_trades(trades):
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("DELETE FROM trades")
-
-    for trade in trades:
-        cur.execute(
-            "INSERT INTO trades (trade_id, trade_data) VALUES (?, ?)",
-            (trade["trade_id"], json.dumps(trade, default=str))
-        )
-
-    conn.commit()
-    conn.close()
-
-
-def load_trades():
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("SELECT trade_data FROM trades")
-    rows = cur.fetchall()
-
-    conn.close()
-
-    return [json.loads(row[0]) for row in rows]
 
 
 # -------------------------
