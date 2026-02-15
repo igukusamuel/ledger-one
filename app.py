@@ -8,7 +8,8 @@ from core.entities import initialize_entity_table, seed_default_entity
 from core.chart_of_accounts import initialize_coa, seed_default_accounts
 
 from tabs.cafe import render as cafe_render
-
+elif selected_tab == "Cafe Operations":
+    cafe_render()
 
 initialize_coa()
 seed_default_accounts()
@@ -20,9 +21,6 @@ initialize_db()
 
 st.set_page_config(layout="wide")
 st.title("LedgerOne")
-
-elif selected_tab == "Cafe Operations":
-    cafe_render()
 
 
 tab1, tab2, tab3, tab4 = st.tabs([
