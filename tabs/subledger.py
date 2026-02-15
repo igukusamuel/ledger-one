@@ -46,11 +46,38 @@ def render():
     # LOAD ENTITIES + COA
     # ==================================================
 
-    entities = get_entities()
-    entity_map = {f"{e[1]} - {e[2]}": e[0] for e in entities}
+from core.entities import get_entities, save_entity
 
-    accounts_df = get_accounts()
-    account_codes = accounts_df["account_code"].tolist()
+st.subheader("Entity Selection")
+
+entities = get_entities()
+
+if not entities:
+
+    st.warning("No entities found. Please create one.")
+
+    new_entity_id = st.text_input("Entity ID")
+    new_entity_code = st.text_input("Entity Code")
+    new_entity_name = st.text_input("Entity Name")
+
+    if st.button("Create Entity"):
+        save_entity(new_entity_id, new_entity_code, new_entity_name)
+        st.success("Entity Created. Please refresh page.")
+        st.stop()
+
+    st.stop()
+
+# Build mapping safely
+entity_map = {e[2]: e[0] for e in entities}
+
+selected_entity = st.selectbox(
+    "Select Entity",
+    list(entity_map.keys()),
+    key="entity_selector"
+)
+
+entity_id = entity_map[selected_entity]
+
 
     # ==================================================
     # 1️⃣ MANUAL ENTRY
