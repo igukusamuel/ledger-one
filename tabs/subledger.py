@@ -10,7 +10,7 @@ from core.persistence import load_journals, save_journals
 from core.audit import log_action
 from core.chart_of_accounts import get_account_type
 
-if st.button("Post Entry"):
+if st.button("Post Entry", key="manual_post_entry"):
 
     if not get_account_type(debit):
         st.error("Invalid debit account.")
