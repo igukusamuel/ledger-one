@@ -5,7 +5,6 @@ DB_NAME = "ledger.db"
 
 
 def initialize_period_table():
-
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
@@ -26,7 +25,6 @@ def initialize_period_table():
 
 
 def get_closed_through():
-
     initialize_period_table()
 
     conn = sqlite3.connect(DB_NAME)
@@ -34,6 +32,7 @@ def get_closed_through():
 
     cursor.execute("SELECT closed_through FROM accounting_period WHERE id=1")
     result = cursor.fetchone()
+
     conn.close()
 
     if result and result[0]:
@@ -43,7 +42,6 @@ def get_closed_through():
 
 
 def close_through(date_value):
-
     initialize_period_table()
 
     conn = sqlite3.connect(DB_NAME)
