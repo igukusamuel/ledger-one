@@ -1,6 +1,5 @@
 import hashlib
 
-# Hardcoded demo users (replace with DB later)
 USERS = {
     "owner": {"password": "owner123", "role": "Owner"},
     "cashier": {"password": "cash123", "role": "Cashier"},
