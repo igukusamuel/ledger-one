@@ -2,16 +2,17 @@ from collections import defaultdict
 from core.chart_of_accounts import get_account_type
 
 
-def post_to_gl(journal_entries):
+def post_to_gl(journal_entries, entity_id):
 
     ledger = defaultdict(float)
 
     for j in journal_entries:
-        ledger[j.debit_account] += j.amount
-        ledger[j.credit_account] -= j.amount
+
+        if j.entity_id == entity_id:
+            ledger[j.debit_account] += j.amount
+            ledger[j.credit_account] -= j.amount
 
     return dict(ledger)
-
 
 def generate_trial_balance(journal_entries):
 
