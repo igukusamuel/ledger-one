@@ -7,6 +7,7 @@ from tabs.tax import render as tax_render
 from tabs.cafe import render as cafe_render
 from core.persistence import initialize_db
 from tabs.coffee_pos import render as coffee_render
+
 initialize_db()
 
 st.set_page_config(layout="wide")
