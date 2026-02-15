@@ -46,19 +46,19 @@ def render():
     # LOAD ENTITIES + COA
     # ==================================================
 
-from core.entities import get_entities, save_entity
-
-st.subheader("Entity Selection")
-
-entities = get_entities()
-
-if not entities:
-
-    st.warning("No entities found. Please create one.")
-
-    new_entity_id = st.text_input("Entity ID")
-    new_entity_code = st.text_input("Entity Code")
-    new_entity_name = st.text_input("Entity Name")
+    from core.entities import get_entities, save_entity
+    
+    st.subheader("Entity Selection")
+    
+    entities = get_entities()
+    
+    if not entities:
+    
+        st.warning("No entities found. Please create one.")
+    
+        new_entity_id = st.text_input("Entity ID")
+        new_entity_code = st.text_input("Entity Code")
+        new_entity_name = st.text_input("Entity Name")
 
     if st.button("Create Entity"):
         save_entity(new_entity_id, new_entity_code, new_entity_name)
