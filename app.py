@@ -37,5 +37,5 @@ with tabs[3]:
 with tabs[4]:
     cafe_render()
 
-#with tabs[5]:
-    #coffee_render()
+with tabs[5]:
+    coffee_render()
