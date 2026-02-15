@@ -7,13 +7,14 @@ from datetime import date
 # Initialization
 # -----------------------------
 
+from core.persistence import load_trades, save_trades
+
 def init_trade_capture():
     if "trades" not in st.session_state:
-        st.session_state.trades = []
+        st.session_state.trades = load_trades()
 
     if "active_trade_id" not in st.session_state:
         st.session_state.active_trade_id = None
-
 
 # -----------------------------
 # Helpers
@@ -102,6 +103,7 @@ def render():
                 }
 
                 st.session_state.trades.append(trade)
+                save_trades(st.session_state.trades)
 
                 # 🔗 Link to Subledger
                 st.session_state.active_trade_id = trade_id
