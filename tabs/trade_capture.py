@@ -2,37 +2,51 @@ import streamlit as st
 import pandas as pd
 from core.models import BondTrade
 
+import uuid
+import streamlit as st
+from datetime import date
+
+
 def init_trade_capture():
     if "trades" not in st.session_state:
         st.session_state.trades = []
 
 def render():
     init_trade_capture()
-    st.header("Trade Capture — Plain Vanilla Bond")
+    st.header("Trade Capture")
+    
+    with st.form("bond_trade"):
+    trade_date = st.date_input("Trade Date", value=date.today())
+    maturity_date = st.date_input("Maturity Date")
+    face_value = st.number_input("Face Value", min_value=0.0, value=100000.0)
+    coupon_rate = st.number_input("Coupon Rate (%)", min_value=0.0, value=5.0)
+    frequency = st.selectbox("Coupon Frequency", [1, 2, 4], index=1)
 
-    c1, c2 = st.columns(2)
+    submitted = st.form_submit_button("Capture Trade")
 
-    trade_id = c1.text_input("Trade ID")
-    direction = c2.selectbox("Direction", ["Buy", "Sell"])
-    trade_date = c1.date_input("Trade Date")
-    maturity_date = c2.date_input("Maturity Date")
-    face_value = c1.number_input("Face Value", min_value=0.0, step=1000.0)
-    coupon = c2.number_input("Coupon Rate (%)", min_value=0.0, step=0.25)
-    price = st.number_input("Clean Price (%)", min_value=0.0, step=0.1)
+    if submitted:
+        trade_id = str(uuid.uuid4())
 
-    if st.button("Capture Trade"):
-        st.session_state.trades.append(
-            BondTrade(
-                trade_id,
-                trade_date,
-                maturity_date,
-                face_value,
-                coupon,
-                price,
-                direction,
-            )
-        )
-        st.success("Trade captured")
+        coupon_amount = face_value * coupon_rate / 100 / frequency
 
-    if st.session_state.trades:
-        st.dataframe(pd.DataFrame([t.__dict__ for t in st.session_state.trades]))
+        trade = {
+            "trade_id": trade_id,
+            "trade_date": trade_date,
+            "maturity_date": maturity_date,
+            "face_value": face_value,
+            "coupon_rate": coupon_rate,
+            "frequency": frequency,
+            "coupon_amount": coupon_amount,
+            "last_coupon_date": trade_date,
+            "status": "OPEN"
+        }
+
+        st.session_state.trades.append(trade)
+
+        # 🔗 CRITICAL LINK TO SUBLEDGER
+        st.session_state["active_trade_id"] = trade_id
+        st.session_state["last_coupon_date"] = trade_date
+        st.session_state["coupon_amount"] = coupon_amount
+
+        st.success("Trade captured and linked to subledger.")
+
