@@ -1,9 +1,11 @@
 import streamlit as st
-
 from tabs.trade_capture import render as trade_capture_render
 from tabs.subledger import render as subledger_render
 from tabs.general_ledger import render as gl_render
 from tabs.tax import render as tax_render
+from core.persistence import initialize_db
+
+initialize_db()
 
 st.set_page_config(layout="wide")
 st.title("LedgerOne")
