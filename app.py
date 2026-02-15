@@ -1,43 +1,34 @@
 import streamlit as st
+
 from tabs.trade_capture import render as trade_capture_render
 from tabs.subledger import render as subledger_render
 from tabs.general_ledger import render as gl_render
 from tabs.tax import render as tax_render
-from core.persistence import initialize_db
-from core.entities import initialize_entity_table, seed_default_entity
-from core.chart_of_accounts import initialize_coa, seed_default_accounts
-
 from tabs.cafe import render as cafe_render
-elif selected_tab == "Cafe Operations":
-    cafe_render()
 
-initialize_coa()
-seed_default_accounts()
-
-initialize_entity_table()
-seed_default_entity()
-
-initialize_db()
 
 st.set_page_config(layout="wide")
-st.title("LedgerOne")
+st.title("LedgerOne ERP System")
 
-
-tab1, tab2, tab3, tab4 = st.tabs([
+tabs = st.tabs([
     "Trade Capture",
     "Subledger",
     "General Ledger",
-    "Tax (1040 / 1040-NR)"
+    "Tax (1040 / 1040NR)",
+    "Coffee Cafe POS"
 ])
 
-with tab1:
+with tabs[0]:
     trade_capture_render()
 
-with tab2:
+with tabs[1]:
     subledger_render()
 
-with tab3:
+with tabs[2]:
     gl_render()
 
-with tab4:
+with tabs[3]:
     tax_render()
+
+with tabs[4]:
+    cafe_render()
