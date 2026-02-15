@@ -6,57 +6,48 @@ from datetime import datetime
 # PAGE CONFIG
 # --------------------------------------------------
 
-st.set_page_config(layout="wide", page_title="LedgerOne Café Test")
+st.set_page_config(layout="wide", page_title="LedgerOne Café")
 
-st.title("LedgerOne ERP System – Café Test Environment")
-st.write("APP LOADED")
+st.title("LedgerOne Café System")
 
 # --------------------------------------------------
 # INITIALIZE DATABASE
 # --------------------------------------------------
 
 from core.persistence import initialize_db
-initialize_db()
-
-st.write("DATABASE INITIALIZED")
-
-# --------------------------------------------------
-# IMPORT CORE MODULES
-# --------------------------------------------------
-
+from core.inventory import init_inventory
 from core.persistence import load_journals
 from core.journals import JournalEntry
-from core.inventory import init_inventory, get_inventory, update_inventory
 from core.pos_gl import post_sale_to_gl
+from core.inventory import get_inventory, update_inventory
 from core.auth import authenticate
 
-# --------------------------------------------------
-# INIT SESSION STATE
-# --------------------------------------------------
-
-def init_app():
-    init_inventory()
-
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
-
-    if "cart" not in st.session_state:
-        st.session_state.cart = []
-
-init_app()
+initialize_db()
+init_inventory()
 
 # --------------------------------------------------
-# LOGIN SCREEN
+# SESSION STATE INIT
+# --------------------------------------------------
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if "cart" not in st.session_state:
+    st.session_state.cart = []
+
+# --------------------------------------------------
+# LOGIN
 # --------------------------------------------------
 
 def login_screen():
 
-    st.header("☕ Café POS Login")
+    st.header("☕ Café Login")
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
+
         role = authenticate(username, password)
 
         if role:
@@ -68,12 +59,12 @@ def login_screen():
             st.error("Invalid credentials")
 
 # --------------------------------------------------
-# POS SCREEN
+# POS TAB
 # --------------------------------------------------
 
-def pos_screen():
+def pos_tab():
 
-    st.header("☕ Café Store")
+    st.header("☕ Store Terminal")
 
     inventory = get_inventory()
 
@@ -85,8 +76,6 @@ def pos_screen():
 
     # ---------------- PRODUCTS ----------------
     with col_products:
-
-        st.subheader("Products")
 
         categories = inventory["category"].unique()
         selected_category = st.selectbox("Category", categories)
@@ -162,7 +151,7 @@ def pos_screen():
 
         if st.button("Checkout"):
 
-            # Double-check stock
+            # Validate stock
             for item in st.session_state.cart:
                 stock = inventory.loc[
                     inventory["product"] == item["product"],
@@ -173,7 +162,7 @@ def pos_screen():
                     st.error(f"Insufficient stock for {item['product']}")
                     return
 
-            # Reduce inventory
+            # Reduce stock
             for item in st.session_state.cart:
                 update_inventory(item["product"], item["quantity"])
 
@@ -192,24 +181,19 @@ def pos_screen():
             st.rerun()
 
 # --------------------------------------------------
-# LEDGER VIEW
+# GL TAB
 # --------------------------------------------------
 
-def ledger_view():
+def gl_tab():
 
-    st.markdown("---")
-    st.header("📘 General Ledger – CAFE Entity")
+    st.header("📘 General Ledger – CAFE")
 
     journals = load_journals(JournalEntry)
-
-    if not journals:
-        st.info("No journal entries posted yet.")
-        return
 
     cafe_journals = [j for j in journals if j.entity_id == "CAFE"]
 
     if not cafe_journals:
-        st.info("No Cafe postings yet.")
+        st.info("No postings yet.")
         return
 
     ledger_rows = []
@@ -240,6 +224,12 @@ def ledger_view():
 
     st.dataframe(df, use_container_width=True)
 
+    st.download_button(
+        "Download Ledger CSV",
+        df.to_csv(index=False),
+        file_name="cafe_ledger.csv"
+    )
+
 # --------------------------------------------------
 # MAIN ROUTING
 # --------------------------------------------------
@@ -247,5 +237,17 @@ def ledger_view():
 if not st.session_state.logged_in:
     login_screen()
 else:
-    pos_screen()
-    ledger_view()
+
+    st.sidebar.write(f"User: {st.session_state.username}")
+    if st.sidebar.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.cart = []
+        st.rerun()
+
+    tabs = st.tabs(["Store Terminal", "General Ledger"])
+
+    with tabs[0]:
+        pos_tab()
+
+    with tabs[1]:
+        gl_tab()
