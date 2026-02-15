@@ -3,10 +3,6 @@ import json
 import os
 from datetime import datetime
 
-# =========================================================
-# CONFIGURATION
-# =========================================================
-
 DATA_DIR = "data"
 DB_NAME = os.path.join(DATA_DIR, "ledger.db")
 INVENTORY_FILE = os.path.join(DATA_DIR, "inventory.json")
@@ -23,9 +19,7 @@ def initialize_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # -------------------------
-    # Journals
-    # -------------------------
+    # ---------------- Journals ----------------
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS journals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,9 +32,21 @@ def initialize_db():
         )
     """)
 
-    # -------------------------
-    # Chart of Accounts
-    # -------------------------
+    # ---------------- Trades ----------------
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_id TEXT,
+            trade_date TEXT,
+            instrument_type TEXT,
+            face_value REAL,
+            coupon_rate REAL,
+            maturity_date TEXT,
+            price REAL
+        )
+    """)
+
+    # ---------------- Chart of Accounts ----------------
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS chart_of_accounts (
             account_code TEXT PRIMARY KEY,
@@ -49,9 +55,7 @@ def initialize_db():
         )
     """)
 
-    # -------------------------
-    # Entities
-    # -------------------------
+    # ---------------- Entities ----------------
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS entities (
             entity_id TEXT PRIMARY KEY,
@@ -59,9 +63,7 @@ def initialize_db():
         )
     """)
 
-    # -------------------------
-    # Audit Log
-    # -------------------------
+    # ---------------- Audit ----------------
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS audit_log (
             timestamp TEXT,
@@ -75,7 +77,64 @@ def initialize_db():
 
 
 # =========================================================
-# JOURNAL PERSISTENCE
+# TRADE CAPTURE
+# =========================================================
+
+def save_trade(entity_id, trade_date, instrument_type,
+               face_value, coupon_rate, maturity_date, price):
+
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO trades (
+            entity_id,
+            trade_date,
+            instrument_type,
+            face_value,
+            coupon_rate,
+            maturity_date,
+            price
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (
+        entity_id,
+        trade_date,
+        instrument_type,
+        face_value,
+        coupon_rate,
+        maturity_date,
+        price
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+def load_trades():
+
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT entity_id, trade_date, instrument_type,
+               face_value, coupon_rate, maturity_date, price
+        FROM trades
+        ORDER BY trade_date DESC
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return rows
+
+
+# =========================================================
+# JOURNALS
 # =========================================================
 
 def save_journals(journal_entries):
@@ -129,89 +188,10 @@ def load_journals(JournalEntry):
 
 
 # =========================================================
-# CHART OF ACCOUNTS
-# =========================================================
-
-def save_account(account_code, account_name, account_type):
-
-    initialize_db()
-
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT OR REPLACE INTO chart_of_accounts
-        VALUES (?, ?, ?)
-    """, (account_code, account_name, account_type))
-
-    conn.commit()
-    conn.close()
-
-
-def load_chart_of_accounts():
-
-    initialize_db()
-
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT account_code, account_name, account_type
-        FROM chart_of_accounts
-        ORDER BY account_code
-    """)
-
-    rows = cursor.fetchall()
-    conn.close()
-
-    return rows
-
-
-# =========================================================
-# ENTITY MANAGEMENT
-# =========================================================
-
-def save_entity(entity_id, entity_name):
-
-    initialize_db()
-
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT OR REPLACE INTO entities
-        VALUES (?, ?)
-    """, (entity_id, entity_name))
-
-    conn.commit()
-    conn.close()
-
-
-def load_entities():
-
-    initialize_db()
-
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT entity_id, entity_name FROM entities
-    """)
-
-    rows = cursor.fetchall()
-    conn.close()
-
-    return rows
-
-
-# =========================================================
 # INVENTORY (JSON)
 # =========================================================
 
 def load_inventory():
-
-    os.makedirs(DATA_DIR, exist_ok=True)
-
     if not os.path.exists(INVENTORY_FILE):
         return {}
 
@@ -220,47 +200,6 @@ def load_inventory():
 
 
 def save_inventory(data):
-
     os.makedirs(DATA_DIR, exist_ok=True)
-
     with open(INVENTORY_FILE, "w") as f:
         json.dump(data, f, indent=4)
-
-
-# =========================================================
-# AUDIT LOG
-# =========================================================
-
-def log_action(action, details):
-
-    initialize_db()
-
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO audit_log
-        VALUES (?, ?, ?)
-    """, (str(datetime.now()), action, details))
-
-    conn.commit()
-    conn.close()
-
-
-def load_audit_log():
-
-    initialize_db()
-
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT timestamp, action, details
-        FROM audit_log
-        ORDER BY timestamp DESC
-    """)
-
-    rows = cursor.fetchall()
-    conn.close()
-
-    return rows
