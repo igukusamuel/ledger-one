@@ -7,9 +7,8 @@ from datetime import date
 # Initialization
 # -----------------------------
 
-from core.persistence import load_trades, save_trades
-
 def init_trade_capture():
+    from core.persistence import load_trades
     if "trades" not in st.session_state:
         st.session_state.trades = load_trades()
 
@@ -80,6 +79,7 @@ def render():
         submitted = st.form_submit_button("Capture Trade")
 
         if submitted:
+            from core.persistence import save_trades
             if maturity_date <= trade_date:
                 st.error("Maturity date must be after trade date.")
             else:
