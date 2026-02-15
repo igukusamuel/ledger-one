@@ -11,6 +11,10 @@ from core.audit import log_action, load_audit_log
 from core.chart_of_accounts import get_account_type
 from core.periods import get_closed_through, close_through
 
+from core.entities import get_entities
+from core.chart_of_accounts import get_accounts
+
+
 
 # ---------------------------------------------------
 # INITIALIZATION
@@ -43,39 +47,77 @@ def render():
     # ==================================================
     # 1️⃣ MANUAL ENTRY
     # ==================================================
-    with tabs[0]:
+   entities = get_entities()
+entity_options = {f"{e[1]} - {e[2]}": e[0] for e in entities}
 
-        entry_date = st.date_input("Entry Date", value=date.today(), key="manual_date")
-        debit = st.text_input("Debit Account", key="manual_debit")
-        credit = st.text_input("Credit Account", key="manual_credit")
-        amount = st.number_input("Amount", min_value=0.0, key="manual_amount")
+selected_entity = st.selectbox(
+    "Select Entity",
+    list(entity_options.keys()),
+    key="entity_select"
+)
 
-        if st.button("Post Entry", key="manual_post"):
+entity_id = entity_options[selected_entity]
 
-            closed_through = get_closed_through()
+accounts_df = get_accounts()
+account_codes = accounts_df["account_code"].tolist()
 
-            if closed_through and entry_date <= closed_through:
-                st.error(f"Period closed through {closed_through}. Posting blocked.")
-            elif not get_account_type(debit):
-                st.error("Invalid debit account.")
-            elif not get_account_type(credit):
-                st.error("Invalid credit account.")
-            else:
+entry_date = st.date_input("Entry Date")
 
-                journal = JournalEntry(
-                    str(entry_date),
-                    debit,
-                    credit,
-                    amount,
-                    "Manual Entry"
-                )
+debit = st.selectbox(
+    "Debit Account",
+    account_codes,
+    key="debit_dropdown"
+)
 
-                st.session_state.journal_entries.append(journal)
-                save_journals(st.session_state.journal_entries)
+credit = st.selectbox(
+    "Credit Account",
+    account_codes,
+    key="credit_dropdown"
+)
 
-                log_action("Manual Entry", f"{debit}/{credit} {amount}")
+amount = st.number_input("Amount", min_value=0.0)
 
-                st.success("Manual journal posted.")
+if st.button("Post Entry", key="manual_post_multi"):
+
+    closed_through = get_closed_through()
+
+    if closed_through and entry_date <= closed_through:
+        st.error("Period closed.")
+    else:
+
+        journal = JournalEntry(
+            entity_id,
+            str(entry_date),
+            debit,
+            credit,
+            amount,
+            "Manual Entry"
+        )
+
+        st.session_state.journal_entries.append(journal)
+        save_journals(st.session_state.journal_entries)
+
+        st.success("Posted.")
+
+        # ==================================================
+    # 2️⃣ CHART OF ACCOUNTS
+    # ==================================================
+
+with tabs[6]:
+
+    st.subheader("Chart of Accounts")
+
+    df = get_accounts()
+
+    st.dataframe(df)
+
+    st.download_button(
+        label="Download COA (Excel)",
+        data=df.to_csv(index=False),
+        file_name="chart_of_accounts.csv",
+        mime="text/csv"
+    )
+
 
     # ==================================================
     # 2️⃣ ACCRUAL GENERATOR
