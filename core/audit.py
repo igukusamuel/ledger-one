@@ -3,7 +3,8 @@ from datetime import datetime
 
 DB_NAME = "ledger.db"
 
-def log_action(action, details):
+
+def initialize_audit_table():
 
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -16,8 +17,20 @@ def log_action(action, details):
         )
     """)
 
+    conn.commit()
+    conn.close()
+
+
+def log_action(action, details):
+
+    initialize_audit_table()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
     cursor.execute("""
-        INSERT INTO audit_log VALUES (?, ?, ?)
+        INSERT INTO audit_log (timestamp, action, details)
+        VALUES (?, ?, ?)
     """, (str(datetime.now()), action, details))
 
     conn.commit()
@@ -26,11 +39,14 @@ def log_action(action, details):
 
 def load_audit_log():
 
+    initialize_audit_table()
+
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT * FROM audit_log
+        SELECT timestamp, action, details
+        FROM audit_log
         ORDER BY timestamp DESC
     """)
 
