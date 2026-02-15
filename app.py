@@ -5,8 +5,8 @@ from tabs.subledger import render as subledger_render
 from tabs.general_ledger import render as gl_render
 from tabs.tax import render as tax_render
 from tabs.cafe import render as cafe_render
-from core.persistence import initialize_db
 from tabs.coffee_pos import render as coffee_render
+from core.persistence import initialize_db
 
 initialize_db()
 
@@ -18,6 +18,7 @@ tabs = st.tabs([
     "Subledger",
     "General Ledger",
     "Tax",
+    "Cafe",
     "Coffee POS"
 ])
 
@@ -36,5 +37,5 @@ with tabs[3]:
 with tabs[4]:
     cafe_render()
 
-with tab5:
+with tabs[5]:
     coffee_render()
