@@ -4,6 +4,10 @@ from tabs.subledger import render as subledger_render
 from tabs.general_ledger import render as gl_render
 from tabs.tax import render as tax_render
 from core.persistence import initialize_db
+from core.chart_of_accounts import initialize_coa, seed_default_accounts
+
+initialize_coa()
+seed_default_accounts()
 
 initialize_db()
 
