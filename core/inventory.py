@@ -1,6 +1,9 @@
 import sqlite3
 import pandas as pd
 
+import os
+
+os.makedirs("data", exist_ok=True)
 DB_PATH = "data/ledger.db"
 
 
