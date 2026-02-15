@@ -4,6 +4,19 @@ from datetime import date
 
 DB_NAME = "ledger.db"
 
+INVENTORY_FILE = "data/inventory.json"
+
+def load_inventory():
+    try:
+        with open(INVENTORY_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {}
+
+
+def save_inventory(data):
+    with open(INVENTORY_FILE, "w") as f:
+        json.dump(data, f, indent=4)
 
 # ------------------------------------------
 # Database Connection
