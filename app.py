@@ -6,17 +6,18 @@ from tabs.general_ledger import render as gl_render
 from tabs.tax import render as tax_render
 from tabs.cafe import render as cafe_render
 from core.persistence import initialize_db
+from tabs.coffee_pos import render as coffee_render
 initialize_db()
 
 st.set_page_config(layout="wide")
 st.title("LedgerOne ERP System")
 
-tabs = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Trade Capture",
     "Subledger",
     "General Ledger",
-    "Tax (1040 / 1040NR)",
-    "Coffee Cafe POS"
+    "Tax",
+    "Coffee POS"
 ])
 
 with tabs[0]:
@@ -33,3 +34,6 @@ with tabs[3]:
 
 with tabs[4]:
     cafe_render()
+
+with tab5:
+    coffee_render()
