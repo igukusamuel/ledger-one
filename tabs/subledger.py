@@ -9,6 +9,7 @@ from core.gl import generate_trial_balance
 from core.persistence import load_journals, save_journals
 from core.audit import log_action, load_audit_log
 from core.chart_of_accounts import get_account_type
+from core.periods import get_closed_through, close_through
 
 
 # ---------------------------------------------------
@@ -16,12 +17,8 @@ from core.chart_of_accounts import get_account_type
 # ---------------------------------------------------
 
 def init_subledger():
-
     if "journal_entries" not in st.session_state:
         st.session_state.journal_entries = load_journals(JournalEntry)
-
-    if "period_closed" not in st.session_state:
-        st.session_state.period_closed = False
 
 
 # ---------------------------------------------------
@@ -44,50 +41,46 @@ def render():
     ])
 
     # ==================================================
-    # 1️⃣ MANUAL JOURNAL ENTRY
+    # 1️⃣ MANUAL ENTRY
     # ==================================================
     with tabs[0]:
 
-        st.subheader("Manual Journal Entry")
+        entry_date = st.date_input("Entry Date", value=date.today(), key="manual_date")
+        debit = st.text_input("Debit Account", key="manual_debit")
+        credit = st.text_input("Credit Account", key="manual_credit")
+        amount = st.number_input("Amount", min_value=0.0, key="manual_amount")
 
-        if st.session_state.period_closed:
-            st.warning("Period is closed. Posting disabled.")
-        else:
+        if st.button("Post Entry", key="manual_post"):
 
-            entry_date = st.date_input("Entry Date", value=date.today(), key="manual_date")
-            debit = st.text_input("Debit Account", key="manual_debit")
-            credit = st.text_input("Credit Account", key="manual_credit")
-            amount = st.number_input("Amount", min_value=0.0, key="manual_amount")
+            closed_through = get_closed_through()
 
-            if st.button("Post Entry", key="manual_post_entry"):
+            if closed_through and entry_date <= closed_through:
+                st.error(f"Period closed through {closed_through}. Posting blocked.")
+            elif not get_account_type(debit):
+                st.error("Invalid debit account.")
+            elif not get_account_type(credit):
+                st.error("Invalid credit account.")
+            else:
 
-                if not get_account_type(debit):
-                    st.error("Invalid debit account.")
-                elif not get_account_type(credit):
-                    st.error("Invalid credit account.")
-                else:
+                journal = JournalEntry(
+                    str(entry_date),
+                    debit,
+                    credit,
+                    amount,
+                    "Manual Entry"
+                )
 
-                    journal = JournalEntry(
-                        str(entry_date),
-                        debit,
-                        credit,
-                        amount,
-                        "Manual Entry"
-                    )
+                st.session_state.journal_entries.append(journal)
+                save_journals(st.session_state.journal_entries)
 
-                    st.session_state.journal_entries.append(journal)
-                    save_journals(st.session_state.journal_entries)
+                log_action("Manual Entry", f"{debit}/{credit} {amount}")
 
-                    log_action("Manual Entry", f"{debit}/{credit} {amount}")
-
-                    st.success("Manual journal posted.")
+                st.success("Manual journal posted.")
 
     # ==================================================
     # 2️⃣ ACCRUAL GENERATOR
     # ==================================================
     with tabs[1]:
-
-        st.subheader("Single Accrual")
 
         if not st.session_state.get("trades"):
             st.info("No trades available.")
@@ -98,16 +91,18 @@ def render():
             selected_trade = st.selectbox(
                 "Select Trade",
                 trade_ids,
-                key="accrual_trade_select"
+                key="accrual_trade"
             )
 
             start = st.date_input("Start Date", key="accrual_start")
             end = st.date_input("End Date", key="accrual_end")
 
-            if st.button("Generate Accrual", key="generate_accrual_btn"):
+            if st.button("Generate Accrual", key="accrual_btn"):
 
-                if st.session_state.period_closed:
-                    st.error("Period closed.")
+                closed_through = get_closed_through()
+
+                if closed_through and end <= closed_through:
+                    st.error("Cannot accrue into closed period.")
                 else:
 
                     trade = next(
@@ -129,14 +124,14 @@ def render():
     # ==================================================
     with tabs[2]:
 
-        st.subheader("Batch Accrual Engine")
-
         cutoff = st.date_input("Cutoff Date", value=date.today(), key="batch_cutoff")
 
-        if st.button("Run Batch", key="run_batch_btn"):
+        if st.button("Run Batch", key="batch_btn"):
 
-            if st.session_state.period_closed:
-                st.error("Period closed.")
+            closed_through = get_closed_through()
+
+            if closed_through and cutoff <= closed_through:
+                st.error("Batch date is within closed period.")
             else:
 
                 journals = batch_accruals(
@@ -156,14 +151,10 @@ def render():
     # ==================================================
     with tabs[3]:
 
-        st.subheader("Trial Balance")
-
         tb = generate_trial_balance(st.session_state.journal_entries)
-
         df = pd.DataFrame(tb)
 
         if not df.empty:
-
             st.dataframe(df)
 
             st.download_button(
@@ -171,9 +162,8 @@ def render():
                 data=df.to_csv(index=False),
                 file_name="trial_balance.csv",
                 mime="text/csv",
-                key="download_tb"
+                key="tb_download"
             )
-
         else:
             st.info("No journal data available.")
 
@@ -181,8 +171,6 @@ def render():
     # 5️⃣ AUDIT LOG
     # ==================================================
     with tabs[4]:
-
-        st.subheader("Audit Log")
 
         logs = load_audit_log()
 
@@ -200,20 +188,18 @@ def render():
     # ==================================================
     with tabs[5]:
 
-        st.subheader("Accounting Period Control")
+        closed_through = get_closed_through()
 
-        if not st.session_state.period_closed:
-
-            if st.button("Close Period", key="close_period_btn"):
-                st.session_state.period_closed = True
-                log_action("Period Closed", "User triggered period close")
-                st.success("Period closed.")
-
+        if closed_through:
+            st.info(f"Closed through: {closed_through}")
         else:
+            st.info("No periods closed.")
 
-            st.warning("Period is currently closed.")
+        close_date = st.date_input("Close Through Date", key="close_date")
 
-            if st.button("Reopen Period", key="reopen_period_btn"):
-                st.session_state.period_closed = False
-                log_action("Period Reopened", "User reopened period")
-                st.success("Period reopened.")
+        if st.button("Close Period Through Date", key="close_btn"):
+
+            close_through(close_date)
+            log_action("Period Closed", f"Closed through {close_date}")
+
+            st.success(f"Period closed through {close_date}")
