@@ -4,8 +4,11 @@ import pandas as pd
 DB_PATH = "data/ledger.db"
 
 
-def init_inventory():
+# -----------------------------------
+# INIT TABLE
+# -----------------------------------
 
+def init_inventory():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -13,6 +16,7 @@ def init_inventory():
         CREATE TABLE IF NOT EXISTS inventory (
             product TEXT PRIMARY KEY,
             category TEXT,
+            subcategory TEXT,
             price REAL,
             cost REAL,
             stock INTEGER
@@ -23,27 +27,9 @@ def init_inventory():
     conn.close()
 
 
-def seed_inventory():
-
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT COUNT(*) FROM inventory")
-    count = cursor.fetchone()[0]
-
-    if count == 0:
-        cursor.executemany("""
-            INSERT INTO inventory VALUES (?, ?, ?, ?, ?)
-        """, [
-            ("Espresso", "Beverage", 3.00, 1.00, 100),
-            ("Latte", "Beverage", 4.50, 1.50, 100),
-            ("Cappuccino", "Beverage", 4.00, 1.40, 100),
-            ("Blueberry Muffin", "Bakery", 2.75, 1.00, 50),
-        ])
-        conn.commit()
-
-    conn.close()
-
+# -----------------------------------
+# GET INVENTORY
+# -----------------------------------
 
 def get_inventory():
     conn = sqlite3.connect(DB_PATH)
@@ -51,6 +37,27 @@ def get_inventory():
     conn.close()
     return df
 
+
+# -----------------------------------
+# ADD PRODUCT (Manager)
+# -----------------------------------
+
+def add_product(product, category, subcategory, price, cost, stock):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT OR REPLACE INTO inventory
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (product, category, subcategory, price, cost, stock))
+
+    conn.commit()
+    conn.close()
+
+
+# -----------------------------------
+# UPDATE INVENTORY
+# -----------------------------------
 
 def update_inventory(product, quantity):
     conn = sqlite3.connect(DB_PATH)
