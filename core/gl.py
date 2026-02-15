@@ -7,16 +7,16 @@ def post_to_gl(journal_entries, entity_id):
     ledger = defaultdict(float)
 
     for j in journal_entries:
-
         if j.entity_id == entity_id:
             ledger[j.debit_account] += j.amount
             ledger[j.credit_account] -= j.amount
 
     return dict(ledger)
 
-def generate_trial_balance(journal_entries):
 
-    gl = post_to_gl(journal_entries)
+def generate_trial_balance(journal_entries, entity_id):
+
+    gl = post_to_gl(journal_entries, entity_id)
 
     trial_balance = []
 
@@ -30,9 +30,9 @@ def generate_trial_balance(journal_entries):
     return trial_balance
 
 
-def generate_financial_statements(journal_entries):
+def generate_financial_statements(journal_entries, entity_id):
 
-    gl = post_to_gl(journal_entries)
+    gl = post_to_gl(journal_entries, entity_id)
 
     income_statement = {}
     balance_sheet = {}
