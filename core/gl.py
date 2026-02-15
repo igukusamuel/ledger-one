@@ -25,21 +25,30 @@ def post_to_gl(journal_entries):
 # GENERATE TRIAL BALANCE
 # ---------------------------------------------------------
 
-def generate_trial_balance(journal_entries):
+def generate_financial_statements(journal_entries):
 
     gl = post_to_gl(journal_entries)
 
-    trial_balance = []
+    income_statement = []
+    balance_sheet = []
 
     for account, balance in gl.items():
 
         account_type = get_account_type(account)
 
-        trial_balance.append({
-            "Account": account,
-            "Type": account_type,
-            "Debit": balance if balance > 0 else 0,
-            "Credit": abs(balance) if balance < 0 else 0
-        })
+        if account_type in ["Revenue", "Expense"]:
+            income_statement.append({
+                "Account": account,
+                "Balance": balance
+            })
 
-    return trial_balance
+        elif account_type in ["Asset", "Liability", "Equity"]:
+            balance_sheet.append({
+                "Account": account,
+                "Balance": balance
+            })
+
+    return {
+        "Income Statement": income_statement,
+        "Balance Sheet": balance_sheet
+    }
