@@ -1,49 +1,49 @@
 import streamlit as st
-from core.gl import post_to_gl
-
 import pandas as pd
-import io
+
+from core.gl import generate_financial_statements
+from core.persistence import load_journals
+from core.journals import JournalEntry
+
 
 def render():
+
     st.header("General Ledger")
 
-    if "journal_entries" not in st.session_state:
-        st.info("No subledger data available.")
-        return
+    journals = load_journals(JournalEntry)
 
-    if st.button("Post from Subledger"):
-        gl = post_to_gl(st.session_state.journal_entries)
+    income_statement, balance_sheet = generate_financial_statements(journals)
 
-        st.dataframe([
-            {"Account": k, "Balance": round(v, 2)}
-            for k, v in gl.items()
-        ])
+    tabs = st.tabs(["Income Statement", "Balance Sheet"])
 
-def render():
-    st.header("General Ledger")
+    with tabs[0]:
+        if income_statement:
+            df = pd.DataFrame(
+                list(income_statement.items()),
+                columns=["Account", "Amount"]
+            )
+            st.dataframe(df)
 
-    if not st.session_state.journal_entries:
-        st.info("No journal entries available.")
-        return
+            st.download_button(
+                "Download Income Statement",
+                df.to_csv(index=False),
+                file_name="income_statement.csv"
+            )
+        else:
+            st.info("No data.")
 
-    df = pd.DataFrame([j.__dict__ for j in st.session_state.journal_entries])
+    with tabs[1]:
+        if balance_sheet:
+            df = pd.DataFrame(
+                list(balance_sheet.items()),
+                columns=["Account", "Amount"]
+            )
+            st.dataframe(df)
 
-    tb = (
-        df.groupby("account")[["debit", "credit"]]
-        .sum()
-        .assign(balance=lambda x: x.debit - x.credit)
-        .reset_index()
-    )
-
-    st.subheader("Trial Balance")
-    st.dataframe(tb)
-
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        tb.to_excel(writer, sheet_name="Trial Balance", index=False)
-
-    st.download_button(
-        "Download Trial Balance (Excel)",
-        output.getvalue(),
-        "trial_balance.xlsx",
-    )
+            st.download_button(
+                "Download Balance Sheet",
+                df.to_csv(index=False),
+                file_name="balance_sheet.csv"
+            )
+        else:
+            st.info("No data.")
