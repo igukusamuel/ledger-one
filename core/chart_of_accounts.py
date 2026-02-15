@@ -30,6 +30,10 @@ def seed_default_accounts():
         ("400000001", "Interest Income", "Revenue"),
         ("500000001", "Interest Expense", "Expense"),
         ("900000001", "Retained Earnings", "Equity"),
+        ("400000002", "Cafe Sales Revenue", "Revenue"),
+        ("500000002", "Cost of Goods Sold", "Expense"),
+        ("100000010", "Inventory", "Asset"),
+
     ]
 
     conn = sqlite3.connect(DB_NAME)
