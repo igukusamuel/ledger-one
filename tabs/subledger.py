@@ -10,7 +10,7 @@ from core.persistence import load_journals, save_journals
 from core.audit import log_action
 from core.chart_of_accounts import get_account_type
 
-if st.button("Post Entry", key="manual_post_entry"):
+if st.button("Post Entry"):
 
     if not get_account_type(debit):
         st.error("Invalid debit account.")
@@ -67,7 +67,7 @@ def render():
             credit = st.text_input("Credit Account")
             amount = st.number_input("Amount", min_value=0.0)
 
-            if st.button("Post Entry"):
+            if st.button("Post Entry", key="manual_post_entry"):
 
                 journal = JournalEntry(
                     str(entry_date),
@@ -99,7 +99,7 @@ def render():
             start = st.date_input("Start Date")
             end = st.date_input("End Date")
 
-            if st.button("Generate Accrual"):
+            if st.button("Generate Accrual", key="generate_accrual"):
 
                 trade = next(
                     t for t in st.session_state.trades
@@ -122,7 +122,7 @@ def render():
 
         cutoff = st.date_input("Cutoff Date", value=date.today())
 
-        if st.button("Run Batch"):
+        if st.button("Run Batch", key="run_batch"):
 
             journals = batch_accruals(
                 st.session_state.trades,
@@ -150,6 +150,7 @@ def render():
 
             st.download_button(
                 "Download Trial Balance (Excel)",
+                key="download_trial_balance",
                 df.to_csv(index=False),
                 file_name="trial_balance.csv",
                 mime="text/csv"
