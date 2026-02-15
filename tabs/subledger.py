@@ -128,4 +128,9 @@ def render():
 
             trade_ids = [t["trade_id"] for t in st.session_state.trades]
 
-            selected_trade = st.selectb_
+            selected_trade = st.selectbox(
+    "Select Trade",
+    trade_options,
+    key="subledger_trade_select"
+)
+
