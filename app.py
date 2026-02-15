@@ -8,14 +8,6 @@ from tabs.cafe import render as cafe_render
 from core.persistence import initialize_db
 initialize_db()
 
-import os
-
-if st.sidebar.button("Reset Database"):
-    if os.path.exists("data/ledger.db"):
-        os.remove("data/ledger.db")
-        st.success("Database Reset — Reload App")
-
-
 st.set_page_config(layout="wide")
 st.title("LedgerOne ERP System")
 
