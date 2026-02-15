@@ -4,3 +4,6 @@ streamlit
 pandas
 python-dateutil
 
+reportlab
+
+
