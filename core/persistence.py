@@ -1,21 +1,34 @@
 import sqlite3
 import json
 import os
+from datetime import datetime
 
-DB_NAME = "data/ledger.db"
-INVENTORY_FILE = "data/inventory.json"
+# =========================================================
+# CONFIGURATION
+# =========================================================
+
+DATA_DIR = "data"
+DB_NAME = os.path.join(DATA_DIR, "ledger.db")
+INVENTORY_FILE = os.path.join(DATA_DIR, "inventory.json")
 
 
-# -------------------------
-# Journals (SQLite)
-# -------------------------
+# =========================================================
+# DATABASE INITIALIZATION
+# =========================================================
 
 def initialize_db():
+
+    os.makedirs(DATA_DIR, exist_ok=True)
+
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
+    # -------------------------
+    # Journals
+    # -------------------------
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS journals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             entity_id TEXT,
             entry_date TEXT,
             debit_account TEXT,
@@ -25,44 +38,48 @@ def initialize_db():
         )
     """)
 
-    conn.commit()
-    conn.close()
-
-# ------------------------------------------
-# Trade Persistence
-# ------------------------------------------
-
-def save_trades(trades):
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("DELETE FROM trades")
-
-    for trade in trades:
-        cur.execute(
-            "INSERT INTO trades (trade_id, trade_data) VALUES (?, ?)",
-            (trade["trade_id"], json.dumps(trade, default=str))
+    # -------------------------
+    # Chart of Accounts
+    # -------------------------
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chart_of_accounts (
+            account_code TEXT PRIMARY KEY,
+            account_name TEXT,
+            account_type TEXT
         )
+    """)
+
+    # -------------------------
+    # Entities
+    # -------------------------
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS entities (
+            entity_id TEXT PRIMARY KEY,
+            entity_name TEXT
+        )
+    """)
+
+    # -------------------------
+    # Audit Log
+    # -------------------------
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS audit_log (
+            timestamp TEXT,
+            action TEXT,
+            details TEXT
+        )
+    """)
 
     conn.commit()
     conn.close()
 
 
-def load_trades():
-    conn = get_connection()
-    cur = conn.cursor()
+# =========================================================
+# JOURNAL PERSISTENCE
+# =========================================================
 
-    cur.execute("SELECT trade_data FROM trades")
-    rows = cur.fetchall()
-
-    conn.close()
-
-    return [json.loads(row[0]) for row in rows]
-
-# ------------------------------------------
-# Journal Persistence
-# ------------------------------------------
 def save_journals(journal_entries):
+
     initialize_db()
 
     conn = sqlite3.connect(DB_NAME)
@@ -70,7 +87,15 @@ def save_journals(journal_entries):
 
     for j in journal_entries:
         cursor.execute("""
-            INSERT INTO journals VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO journals (
+                entity_id,
+                entry_date,
+                debit_account,
+                credit_account,
+                amount,
+                description
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
         """, (
             j.entity_id,
             j.entry_date,
@@ -85,23 +110,108 @@ def save_journals(journal_entries):
 
 
 def load_journals(JournalEntry):
+
     initialize_db()
 
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM journals")
+    cursor.execute("""
+        SELECT entity_id, entry_date, debit_account,
+               credit_account, amount, description
+        FROM journals
+    """)
+
     rows = cursor.fetchall()
     conn.close()
 
     return [JournalEntry(*row) for row in rows]
 
 
-# -------------------------
-# Inventory (JSON)
-# -------------------------
+# =========================================================
+# CHART OF ACCOUNTS
+# =========================================================
+
+def save_account(account_code, account_name, account_type):
+
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT OR REPLACE INTO chart_of_accounts
+        VALUES (?, ?, ?)
+    """, (account_code, account_name, account_type))
+
+    conn.commit()
+    conn.close()
+
+
+def load_chart_of_accounts():
+
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT account_code, account_name, account_type
+        FROM chart_of_accounts
+        ORDER BY account_code
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return rows
+
+
+# =========================================================
+# ENTITY MANAGEMENT
+# =========================================================
+
+def save_entity(entity_id, entity_name):
+
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT OR REPLACE INTO entities
+        VALUES (?, ?)
+    """, (entity_id, entity_name))
+
+    conn.commit()
+    conn.close()
+
+
+def load_entities():
+
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT entity_id, entity_name FROM entities
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return rows
+
+
+# =========================================================
+# INVENTORY (JSON)
+# =========================================================
 
 def load_inventory():
+
+    os.makedirs(DATA_DIR, exist_ok=True)
+
     if not os.path.exists(INVENTORY_FILE):
         return {}
 
@@ -110,6 +220,47 @@ def load_inventory():
 
 
 def save_inventory(data):
-    os.makedirs("data", exist_ok=True)
+
+    os.makedirs(DATA_DIR, exist_ok=True)
+
     with open(INVENTORY_FILE, "w") as f:
         json.dump(data, f, indent=4)
+
+
+# =========================================================
+# AUDIT LOG
+# =========================================================
+
+def log_action(action, details):
+
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO audit_log
+        VALUES (?, ?, ?)
+    """, (str(datetime.now()), action, details))
+
+    conn.commit()
+    conn.close()
+
+
+def load_audit_log():
+
+    initialize_db()
+
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT timestamp, action, details
+        FROM audit_log
+        ORDER BY timestamp DESC
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return rows
