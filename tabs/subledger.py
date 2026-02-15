@@ -129,8 +129,168 @@ def render():
             trade_ids = [t["trade_id"] for t in st.session_state.trades]
 
             selected_trade = st.selectbox(
-    "Select Trade",
-    trade_options,
-    key="subledger_trade_select"
-)
+                "Select Trade",
+                trade_ids,
+                key="accrual_trade"
+            )
 
+            start = st.date_input("Start Date", key="accrual_start")
+            end = st.date_input("End Date", key="accrual_end")
+
+            if st.button("Generate Accrual", key="accrual_btn"):
+
+                closed_through = get_closed_through()
+
+                if closed_through and end <= closed_through:
+                    st.error("Cannot accrue into closed period.")
+                else:
+
+                    trade = next(
+                        t for t in st.session_state.trades
+                        if t["trade_id"] == selected_trade
+                    )
+
+                    journal = generate_accrual_journal(
+                        trade,
+                        start,
+                        end,
+                        entity_id=entity_id
+                    )
+
+                    st.session_state.journal_entries.append(journal)
+                    save_journals(st.session_state.journal_entries)
+
+                    log_action("Accrual Generated", f"{entity_id} {selected_trade}")
+
+                    st.success("Accrual posted.")
+
+    # ==================================================
+    # 3️⃣ BATCH ACCRUALS
+    # ==================================================
+    with tabs[2]:
+
+        st.subheader("Batch Accrual Engine")
+
+        selected_entity = st.selectbox(
+            "Entity",
+            list(entity_map.keys()),
+            key="batch_entity"
+        )
+
+        entity_id = entity_map[selected_entity]
+
+        cutoff = st.date_input("Cutoff Date", value=date.today(), key="batch_cutoff")
+
+        if st.button("Run Batch", key="batch_btn"):
+
+            closed_through = get_closed_through()
+
+            if closed_through and cutoff <= closed_through:
+                st.error("Batch date is within closed period.")
+            else:
+
+                journals = batch_accruals(
+                    st.session_state.get("trades", []),
+                    cutoff,
+                    entity_id=entity_id
+                )
+
+                st.session_state.journal_entries.extend(journals)
+                save_journals(st.session_state.journal_entries)
+
+                log_action("Batch Accrual", f"{entity_id} {len(journals)} entries")
+
+                st.success(f"{len(journals)} accruals generated.")
+
+    # ==================================================
+    # 4️⃣ TRIAL BALANCE (ENTITY SPECIFIC)
+    # ==================================================
+    with tabs[3]:
+
+        st.subheader("Trial Balance")
+
+        selected_entity = st.selectbox(
+            "Entity",
+            list(entity_map.keys()),
+            key="tb_entity"
+        )
+
+        entity_id = entity_map[selected_entity]
+
+        tb = generate_trial_balance(
+            [j for j in st.session_state.journal_entries if j.entity_id == entity_id]
+        )
+
+        df = pd.DataFrame(tb)
+
+        if not df.empty:
+
+            st.dataframe(df)
+
+            st.download_button(
+                label="Download Trial Balance (CSV)",
+                data=df.to_csv(index=False),
+                file_name=f"trial_balance_{entity_id}.csv",
+                mime="text/csv",
+                key="tb_download"
+            )
+        else:
+            st.info("No journal data available.")
+
+    # ==================================================
+    # 5️⃣ AUDIT LOG
+    # ==================================================
+    with tabs[4]:
+
+        st.subheader("Audit Log")
+
+        logs = load_audit_log()
+
+        if logs:
+            df = pd.DataFrame(
+                logs,
+                columns=["Timestamp", "Action", "Details"]
+            )
+            st.dataframe(df)
+        else:
+            st.info("No audit activity yet.")
+
+    # ==================================================
+    # 6️⃣ CHART OF ACCOUNTS
+    # ==================================================
+    with tabs[5]:
+
+        st.subheader("Chart of Accounts")
+
+        st.dataframe(accounts_df)
+
+        st.download_button(
+            label="Download COA (CSV)",
+            data=accounts_df.to_csv(index=False),
+            file_name="chart_of_accounts.csv",
+            mime="text/csv",
+            key="coa_download"
+        )
+
+    # ==================================================
+    # 7️⃣ PERIOD CONTROL
+    # ==================================================
+    with tabs[6]:
+
+        st.subheader("Accounting Period Control")
+
+        closed_through = get_closed_through()
+
+        if closed_through:
+            st.info(f"Closed through: {closed_through}")
+        else:
+            st.info("No periods closed.")
+
+        close_date = st.date_input("Close Through Date", key="close_date")
+
+        if st.button("Close Period Through Date", key="close_btn"):
+
+            close_through(close_date)
+            log_action("Period Closed", f"Closed through {close_date}")
+
+            st.success(f"Period closed through {close_date}")
