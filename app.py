@@ -13,7 +13,7 @@ initialize_db()
 st.set_page_config(layout="wide")
 st.title("LedgerOne ERP System")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tabs = st.tabs([
     "Trade Capture",
     "Subledger",
     "General Ledger",
