@@ -1,203 +1,362 @@
 import streamlit as st
+import sqlite3
 import pandas as pd
 from datetime import datetime
-from core.auth import authenticate
-from core.inventory import init_inventory, get_inventory, add_product, update_inventory
-from core.pos_gl import post_sale_to_gl
 
+DB = "data/ledger.db"
 
-# --------------------------------------------------
-# INIT
-# --------------------------------------------------
+# -------------------------------------------------
+# DB CONNECTION
+# -------------------------------------------------
 
-def init_pos():
+def get_conn():
+    return sqlite3.connect(DB, check_same_thread=False)
 
-    init_inventory()
+# -------------------------------------------------
+# INITIALIZE DATABASE
+# -------------------------------------------------
 
-    if "cafe_logged_in" not in st.session_state:
-        st.session_state.cafe_logged_in = False
+def initialize_db():
 
-    if "cafe_cart" not in st.session_state:
-        st.session_state.cafe_cart = []
+    conn = get_conn()
+    c = conn.cursor()
 
-    if "cafe_sales" not in st.session_state:
-        st.session_state.cafe_sales = []
+    # Inventory
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS inventory (
+            product TEXT PRIMARY KEY,
+            category TEXT,
+            subcategory TEXT,
+            description TEXT,
+            price REAL,
+            cost REAL,
+            stock INTEGER
+        )
+    """)
 
+    # General Ledger
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS gl (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            account TEXT,
+            debit REAL,
+            credit REAL,
+            description TEXT
+        )
+    """)
 
-# --------------------------------------------------
+    conn.commit()
+    conn.close()
+
+# -------------------------------------------------
+# SEED INVENTORY
+# -------------------------------------------------
+
+def seed_inventory():
+
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute("SELECT COUNT(*) FROM inventory")
+    if c.fetchone()[0] == 0:
+
+        products = [
+            ("Espresso","Beverage","Hot","Strong black coffee",3,1,100),
+            ("Latte","Beverage","Hot","Milk-based espresso drink",4.5,1.5,100),
+            ("Iced Coffee","Beverage","Cold","Chilled brewed coffee",4,1.2,100),
+            ("Croissant","Pastry","Bakery","Buttery pastry",3.5,1,50),
+            ("Muffin","Pastry","Bakery","Fresh baked muffin",3,0.9,50)
+        ]
+
+        c.executemany("INSERT INTO inventory VALUES (?,?,?,?,?,?,?)", products)
+
+    conn.commit()
+    conn.close()
+
+# -------------------------------------------------
+# AUTH
+# -------------------------------------------------
+
+def authenticate(user, pwd):
+
+    users = {
+        "admin":"Owner",
+        "manager":"Manager",
+        "cashier":"Cashier"
+    }
+
+    return users.get(user)
+
+# -------------------------------------------------
+# GL POSTING
+# -------------------------------------------------
+
+def post_sale(total, tax, revenue, cogs, payment):
+
+    conn = get_conn()
+    c = conn.cursor()
+
+    date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    cash_account = "Cash" if payment=="Cash" else "Card Receivable"
+
+    entries = [
+        (date, cash_account, total, 0, "Sale"),
+        (date, "Sales Revenue", 0, revenue, "Sale"),
+        (date, "Sales Tax Payable", 0, tax, "Tax"),
+        (date, "Cost of Goods Sold", cogs, 0, "COGS"),
+        (date, "Inventory", 0, cogs, "Inventory Reduction")
+    ]
+
+    c.executemany("""
+        INSERT INTO gl (date,account,debit,credit,description)
+        VALUES (?,?,?,?,?)
+    """, entries)
+
+    conn.commit()
+    conn.close()
+
+# -------------------------------------------------
 # LOGIN
-# --------------------------------------------------
+# -------------------------------------------------
 
 def login():
 
-    st.title("☕ LedgerOne Café")
+    st.title("☕ LedgerOne Café ERP")
 
-    username = st.text_input("Username", key="cafe_user")
-    password = st.text_input("Password", type="password", key="cafe_pass")
+    user = st.text_input("Username")
+    pwd = st.text_input("Password", type="password")
 
-    if st.button("Login", key="cafe_login_btn"):
+    if st.button("Login"):
 
-        role = authenticate(username, password)
+        role = authenticate(user,pwd)
 
         if role:
-            st.session_state.cafe_logged_in = True
-            st.session_state.cafe_role = role
-            st.session_state.cafe_username = username
+            st.session_state.logged_in = True
+            st.session_state.role = role
+            st.session_state.user = user
             st.rerun()
         else:
             st.error("Invalid credentials")
 
+# -------------------------------------------------
+# STORE POS
+# -------------------------------------------------
 
-# --------------------------------------------------
-# POS SCREEN
-# --------------------------------------------------
+def store_terminal():
 
-def pos_screen():
-
-    inventory = get_inventory()
+    conn = get_conn()
+    inventory = pd.read_sql("SELECT * FROM inventory", conn)
+    conn.close()
 
     if inventory.empty:
-        st.warning("No products available.")
+        st.warning("Inventory not available.")
         return
 
-    col_products, col_cart = st.columns([2, 1])
+    col1, col2 = st.columns([2,1])
 
-    # --------------------------------------------------
-    # LEFT SIDE — PRODUCTS
-    # --------------------------------------------------
-    with col_products:
+    # LEFT - PRODUCTS
+    with col1:
 
         st.subheader("Products")
 
-        categories = inventory["category"].unique()
-        selected_category = st.selectbox("Category", categories)
-
-        subcategories = inventory[
-            inventory["category"] == selected_category
-        ]["subcategory"].unique()
-
-        selected_subcategory = st.selectbox("Subcategory", subcategories)
+        category = st.selectbox("Category", inventory["category"].unique())
+        sub = st.selectbox("Subcategory",
+                           inventory[inventory["category"]==category]["subcategory"].unique())
 
         filtered = inventory[
-            (inventory["category"] == selected_category) &
-            (inventory["subcategory"] == selected_subcategory)
+            (inventory["category"]==category) &
+            (inventory["subcategory"]==sub)
         ]
 
         for _, row in filtered.iterrows():
 
-            stock_level = row["stock"]
+            qty = st.number_input(
+                f"Qty - {row['product']}",
+                min_value=1,
+                value=1,
+                key=row['product']
+            )
 
-            col_item, col_qty = st.columns([3, 1])
+            if st.button(f"Add {row['product']} (${row['price']})",
+                         key=row['product']+"_btn"):
 
-            with col_item:
-                st.write(f"**{row['product']}**  —  ${row['price']}")
+                st.session_state.cart.append({
+                    "product":row["product"],
+                    "price":row["price"],
+                    "quantity":qty,
+                    "total":row["price"]*qty,
+                    "cogs":row["cost"]*qty
+                })
 
-                if stock_level <= 5:
-                    st.caption(f"⚠ Low stock: {stock_level}")
-                else:
-                    st.caption(f"In stock: {stock_level}")
+                st.rerun()
 
-            with col_qty:
-
-                quantity = st.number_input(
-                    "",
-                    min_value=1,
-                    max_value=stock_level if stock_level > 0 else 1,
-                    value=1,
-                    key=f"qty_{row['product']}"
-                )
-
-                if st.button("Add", key=f"add_{row['product']}"):
-
-                    if stock_level < quantity:
-                        st.error("Not enough stock.")
-                    else:
-
-                        st.session_state.cart.append({
-                            "product": row["product"],
-                            "price": row["price"],
-                            "quantity": quantity,
-                            "total": row["price"] * quantity,
-                            "cogs": row["cost"] * quantity  # hidden internally
-                        })
-
-                        st.success(f"{row['product']} added")
-
-    # --------------------------------------------------
-    # RIGHT SIDE — CART
-    # --------------------------------------------------
-    with col_cart:
+    # RIGHT - CART
+    with col2:
 
         st.subheader("Cart")
 
-        if not st.session_state.cart:
-            st.info("Cart empty.")
-            return
+        if st.session_state.cart:
 
-        df = pd.DataFrame(st.session_state.cart)
+            df = pd.DataFrame(st.session_state.cart)
 
-        # Only show customer-facing columns
-        display_df = df[["product", "quantity", "price", "total"]]
+            display_df = df[["product","price","quantity","total"]]
+            st.dataframe(display_df)
 
-        st.dataframe(display_df, use_container_width=True)
+            subtotal = df["total"].sum()
+            tax = subtotal * 0.07
+            total = subtotal + tax
+            cogs = df["cogs"].sum()
 
-        subtotal = df["total"].sum()
-        tax = round(subtotal * 0.07, 2)
-        total = round(subtotal + tax, 2)
-        total_cogs = df["cogs"].sum()
+            st.write(f"Subtotal: ${round(subtotal,2)}")
+            st.write(f"Tax: ${round(tax,2)}")
+            st.write(f"Total: ${round(total,2)}")
 
-        st.markdown("---")
-        st.write(f"Subtotal: ${subtotal}")
-        st.write(f"Sales Tax (7%): ${tax}")
-        st.write(f"**Total: ${total}**")
+            payment = st.selectbox("Payment",["Cash","Card"])
 
-        payment = st.selectbox("Payment Type", ["Cash", "Card"])
+            if st.button("Checkout"):
 
-        if st.button("Checkout"):
+                conn = get_conn()
+                c = conn.cursor()
 
-            # Stock validation (double check)
-            for item in st.session_state.cart:
-                stock = inventory.loc[
-                    inventory["product"] == item["product"],
-                    "stock"
-                ].values[0]
+                for item in st.session_state.cart:
+                    c.execute("""
+                        UPDATE inventory
+                        SET stock = stock - ?
+                        WHERE product=?
+                    """,(item["quantity"],item["product"]))
 
-                if stock < item["quantity"]:
-                    st.error(f"Insufficient stock for {item['product']}")
-                    return
+                conn.commit()
+                conn.close()
 
-            # Reduce inventory
-            for item in st.session_state.cart:
-                update_inventory(item["product"], item["quantity"])
+                post_sale(total,tax,subtotal,cogs,payment)
 
-            # Post to GL
-            post_sale_to_gl(
-                entity_id="CAFE",
-                total=total,
-                tax=tax,
-                revenue=subtotal,
-                cogs=total_cogs,
-                payment_type=payment
-            )
+                st.success("Sale Completed")
+                st.session_state.cart=[]
+                st.rerun()
 
-            st.session_state.daily_sales.append({
-                "time": datetime.now(),
-                "total": total
-            })
+        else:
+            st.info("Cart Empty")
 
-            st.success("Sale Completed")
-            st.session_state.cart = []
-            st.rerun()
+# -------------------------------------------------
+# ADMIN INVENTORY
+# -------------------------------------------------
 
-# --------------------------------------------------
-# MAIN
-# --------------------------------------------------
+def admin_inventory():
+
+    if st.session_state.role not in ["Owner","Manager"]:
+        st.warning("Admin access only")
+        return
+
+    st.subheader("Add / Update Product")
+
+    product = st.text_input("Product Name")
+    category = st.selectbox("Category",["Beverage","Pastry","Food","Merch"])
+    sub = st.selectbox("Subcategory",["Hot","Cold","Bakery","Snack","Retail"])
+    desc = st.text_area("Description")
+    qty = st.number_input("Quantity",0)
+    cost = st.number_input("Cost",0.0)
+    price = st.number_input("Price",0.0)
+
+    if st.button("Save Product"):
+
+        conn = get_conn()
+        c = conn.cursor()
+
+        c.execute("SELECT * FROM inventory WHERE product=?",(product,))
+        exists = c.fetchone()
+
+        if exists:
+            c.execute("UPDATE inventory SET stock=stock+? WHERE product=?",
+                      (qty,product))
+            st.success("Stock Updated")
+        else:
+            c.execute("""
+                INSERT INTO inventory VALUES (?,?,?,?,?,?,?)
+            """,(product,category,sub,desc,price,cost,qty))
+            st.success("Product Added")
+
+        conn.commit()
+        conn.close()
+        st.rerun()
+
+    conn = get_conn()
+    inv = pd.read_sql("SELECT * FROM inventory",conn)
+    conn.close()
+    st.dataframe(inv)
+
+# -------------------------------------------------
+# GL REPORTS
+# -------------------------------------------------
+
+def general_ledger():
+
+    conn = get_conn()
+    gl = pd.read_sql("SELECT * FROM gl",conn)
+    conn.close()
+    st.dataframe(gl)
+
+def trial_balance():
+
+    conn = get_conn()
+    gl = pd.read_sql("SELECT account, SUM(debit) debit, SUM(credit) credit FROM gl GROUP BY account",conn)
+    conn.close()
+
+    gl["balance"] = gl["debit"] - gl["credit"]
+    st.dataframe(gl)
+
+def income_statement():
+
+    conn = get_conn()
+    gl = pd.read_sql("SELECT account,SUM(debit) debit,SUM(credit) credit FROM gl GROUP BY account",conn)
+    conn.close()
+
+    revenue = gl[gl["account"]=="Sales Revenue"]["credit"].sum()
+    cogs = gl[gl["account"]=="Cost of Goods Sold"]["debit"].sum()
+
+    st.write("Revenue:",revenue)
+    st.write("COGS:",cogs)
+    st.write("Net Income:",revenue-cogs)
+
+# -------------------------------------------------
+# MAIN RENDER
+# -------------------------------------------------
 
 def render():
 
-    init_pos()
+    initialize_db()
+    seed_inventory()
 
-    if not st.session_state.cafe_logged_in:
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in=False
+
+    if "cart" not in st.session_state:
+        st.session_state.cart=[]
+
+    if not st.session_state.logged_in:
         login()
-    else:
-        pos_screen()
+        return
+
+    tabs = st.tabs([
+        "Store Terminal",
+        "Admin Inventory",
+        "General Ledger",
+        "Trial Balance",
+        "Income Statement"
+    ])
+
+    with tabs[0]:
+        store_terminal()
+
+    with tabs[1]:
+        admin_inventory()
+
+    with tabs[2]:
+        general_ledger()
+
+    with tabs[3]:
+        trial_balance()
+
+    with tabs[4]:
+        income_statement()
