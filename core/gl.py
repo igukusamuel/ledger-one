@@ -1,94 +1,123 @@
 from collections import defaultdict
-import pandas as pd
+from core.chart_of_accounts import get_account_type
+from core.persistence import save_journals, load_journals
+from core.journals import JournalEntry
+from datetime import date
 
+def post_sale_to_gl(entity_id, total, tax, revenue, cogs, payment_type):
 
-# --------------------------------------------------
-# POST JOURNAL ENTRIES TO GL
-# --------------------------------------------------
+# =====================================================
+# POST TO GL (ACCOUNTING-CORRECT)
+# =====================================================
+    journals = load_journals(JournalEntry)
 
-def post_to_gl(journal_entries):
+def post_to_gl(journal_entries, entity_id=None):
     """
-    journal_entries = list of dicts with:
-    debit_account, credit_account, amount
+    Aggregates journal entries into GL balances.
+    Respects normal balance by account type.
+    Optional entity filter.
     """
-    gl = defaultdict(float)
+    today = str(date.today())
+
+    ledger = defaultdict(lambda: {
+        "Debit": 0.0,
+        "Credit": 0.0
+    })
+    cash_account = "100000001" if payment_type == "Cash" else "100000002"
 
     for j in journal_entries:
-        gl[j["debit_account"]] += j["amount"]
-        gl[j["credit_account"]] -= j["amount"]
+    entries = [
 
-    return gl
+        if entity_id and j.entity_id != entity_id:
+            continue
+        # Debit Cash / Card
+        JournalEntry(entity_id, today, cash_account, "400000001", revenue),
 
+        ledger[j.debit_account]["Debit"] += j.amount
+        ledger[j.credit_account]["Credit"] += j.amount
+        # Credit Sales Tax
+        JournalEntry(entity_id, today, cash_account, "200000001", tax),
 
-# --------------------------------------------------
-# GENERATE TRIAL BALANCE
-# --------------------------------------------------
+    balances = {}
+        # COGS
+        JournalEntry(entity_id, today, "500000001", "100000003", cogs),
+    ]
 
-def generate_trial_balance(journal_entries):
-    """
-    Accepts list of journal entry dicts
-    Returns pandas DataFrame
-    """
+    for account, amounts in ledger.items():
+    journals.extend(entries)
 
-    gl = post_to_gl(journal_entries)
+        account_type = get_account_type(account)
 
-    rows = []
+        debit = amounts["Debit"]
+        credit = amounts["Credit"]
 
-    for account, balance in gl.items():
-        debit = balance if balance > 0 else 0
-        credit = abs(balance) if balance < 0 else 0
+        if account_type in ["Asset", "Expense"]:
+            balance = debit - credit
+        else:
+            balance = credit - debit
 
-        rows.append({
-            "Account": account,
-            "Debit": round(debit, 2),
-            "Credit": round(credit, 2)
-        })
+        balances[account] = round(balance, 2)
 
-    df = pd.DataFrame(rows)
-
-    if not df.empty:
-        totals = {
-            "Account": "TOTAL",
-            "Debit": df["Debit"].sum(),
-            "Credit": df["Credit"].sum()
-        }
-        df = pd.concat([df, pd.DataFrame([totals])], ignore_index=True)
-
-    return df
+    return balances
 
 
-# --------------------------------------------------
-# GENERATE FINANCIAL STATEMENTS
-# --------------------------------------------------
+# =====================================================
+# TRIAL BALANCE
+# =====================================================
 
-def generate_financial_statements(journal_entries):
+def generate_trial_balance(journal_entries, entity_id=None):
 
-    gl = post_to_gl(journal_entries)
-
-    revenue = 0
-    expenses = 0
-
-    for account, balance in gl.items():
-
-        if "Revenue" in account:
-            revenue += abs(balance)
-
-        if "COGS" in account or "Expense" in account:
-            expenses += abs(balance)
-
-    net_income = revenue - expenses
-
-    income_statement = pd.DataFrame({
-        "Line Item": [
-            "Revenue",
-            "Expenses",
-            "Net Income"
-        ],
-        "Amount": [
-            round(revenue, 2),
-            round(expenses, 2),
-            round(net_income, 2)
-        ]
+    ledger = defaultdict(lambda: {
+        "Debit": 0.0,
+        "Credit": 0.0
     })
 
-    return income_statement
+    for j in journal_entries:
+
+        if entity_id and j.entity_id != entity_id:
+            continue
+
+        ledger[j.debit_account]["Debit"] += j.amount
+        ledger[j.credit_account]["Credit"] += j.amount
+
+    trial_balance = []
+
+    for account, amounts in ledger.items():
+
+        trial_balance.append({
+            "Account": account,
+            "Debit": round(amounts["Debit"], 2),
+            "Credit": round(amounts["Credit"], 2)
+        })
+
+    return trial_balance
+
+
+# =====================================================
+# FINANCIAL STATEMENTS
+# =====================================================
+
+def generate_financial_statements(journal_entries, entity_id=None):
+    """
+    Returns:
+        income_statement (dict)
+        balance_sheet (dict)
+    """
+
+    gl = post_to_gl(journal_entries, entity_id)
+
+    income_statement = {}
+    balance_sheet = {}
+
+    for account, balance in gl.items():
+
+        account_type = get_account_type(account)
+
+        if account_type in ["Revenue", "Expense"]:
+            income_statement[account] = balance
+
+        elif account_type in ["Asset", "Liability", "Equity"]:
+            balance_sheet[account] = balance
+
+    return income_statement, balance_sheet
+    save_journals(journals)
